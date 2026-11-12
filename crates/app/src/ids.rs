@@ -216,7 +216,7 @@ fn tab_new_editor(s: &mut S, p: &Value) -> R {
 pub fn commands() -> Vec<CommandSpec<S>> {
     vec![
         // ---- agent tools: read only
-        query!("db.connections", "List Connections", [], not_yet),
+        query!("db.connections", "List Connections", [], crate::agent::tools::db_connections),
         query!(
             "db.schema",
             "Show Schema",
@@ -225,7 +225,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::string("schema").about("only this schema"),
                 Param::string("table").about("only this table, with columns, keys and indexes")
             ],
-            not_yet
+            crate::agent::tools::db_schema
         ),
         query!(
             "db.query",
@@ -236,13 +236,13 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::int_in("limit", 1, AGENT_ROW_CAP_MAX as i64).about("max rows (default 5000)"),
                 Param::int_in("timeout_ms", 1, AGENT_TIMEOUT_MS_MAX as i64).about("statement timeout (default 15000)"),
             ],
-            not_yet
+            crate::agent::tools::db_query
         ),
         query!(
             "db.explain",
             "Explain Query",
             [CONNECTION, SQL, Param::bool("analyze").about("run it to measure (read-only statements only); default false")],
-            not_yet
+            crate::agent::tools::db_explain
         ),
         query!(
             "db.sample",
@@ -252,9 +252,14 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::string("table").required().about("table, optionally schema.table"),
                 Param::int_in("n", 1, SAMPLE_MAX as i64).about("rows (default 20)")
             ],
-            not_yet
+            crate::agent::tools::db_sample
         ),
-        query!("db.proposal_status", "Proposal Status", [Param::int_in("proposal_id", 1, i64::MAX).required()], not_yet),
+        query!(
+            "db.proposal_status",
+            "Proposal Status",
+            [Param::int_in("proposal_id", 1, i64::MAX).required()],
+            crate::agent::tools::db_proposal_status
+        ),
         // ---- agent tools: approval (creates a proposal; never runs SQL)
         cmd!(
             "db.propose_write",
@@ -267,7 +272,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::string("reason").required().about("why, shown to the person")
             ],
             always,
-            not_yet
+            crate::agent::tools::db_propose_write
         ),
         // ---- agent tools: UI
         cmd!(
@@ -277,7 +282,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
             None,
             [CONNECTION, Param::string("table").required().about("table, optionally schema.table")],
             always,
-            not_yet
+            crate::agent::tools::view_open_table
         ),
         cmd!(
             "view.run_in_editor",
@@ -286,7 +291,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
             None,
             [Param::string("sql").required().about("shown, not run"), Param::string("connection").about("connection id")],
             always,
-            not_yet
+            crate::agent::tools::view_run_in_editor
         ),
         cmd!(
             "view.filter",
@@ -295,7 +300,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
             None,
             [TAB, Param::string("where").required().about("a WHERE clause; checked by the guard")],
             always,
-            not_yet
+            crate::agent::tools::view_filter
         ),
         query!(
             "view.select",
@@ -305,9 +310,9 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::json("rows").required().about("row indexes [0, 5] or ranges [{\"from\": 0, \"to\": 9}]"),
                 Param::json("columns").about("column names; default all")
             ],
-            not_yet
+            crate::agent::tools::view_select
         ),
-        query!("view.focus", "Focus a Region", [Param::one_of("region", Region::NAMES).required()], not_yet),
+        query!("view.focus", "Focus a Region", [Param::one_of("region", Region::NAMES).required()], crate::agent::tools::view_focus),
         cmd!(
             "viz.chart",
             "Chart a Query",
@@ -323,7 +328,7 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::string("title"),
             ],
             always,
-            not_yet
+            crate::agent::tools::viz_chart
         ),
         cmd!(
             "viz.pivot",
@@ -339,9 +344,9 @@ pub fn commands() -> Vec<CommandSpec<S>> {
                 Param::one_of("agg", &["count", "sum", "avg", "min", "max"]).about("default count"),
             ],
             always,
-            not_yet
+            crate::agent::tools::viz_pivot
         ),
-        cmd!("viz.close", "Close a Chart", [], None, [PANEL], always, not_yet),
+        cmd!("viz.close", "Close a Chart", [], None, [PANEL], always, crate::agent::tools::viz_close),
         // ---- human commands
         CommandSpec::new("palette.open", "Command Palette", palette_open).shortcut("Mod+K").query(),
         cmd!("conn.new", "New Connection…", ["Connection"], None, [], always, crate::sidebar::commands::conn_new),
@@ -382,6 +387,6 @@ pub fn commands() -> Vec<CommandSpec<S>> {
         cmd!("edit.discard", "Discard Pending Changes", ["Edit"], None, [], always, not_yet),
         query!("edit.review", "Review Pending Changes…", [], not_yet).shortcut("Mod+Alt+S"),
         CommandSpec::new("agent.toggle_panel", "Agent Panel", agent_toggle_panel).menu(&["View"]).shortcut("Mod+L").query(),
-        query!("proposal.focus", "Review Agent Proposal", [], not_yet).shortcut("Mod+Shift+A"),
+        query!("proposal.focus", "Review Agent Proposal", [], crate::agent::proposal_focus).shortcut("Mod+Shift+A"),
     ]
 }

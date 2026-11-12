@@ -111,7 +111,8 @@ with the same ids (additive).
   rows_affected?, undo_sql?, note? }` (one JSONL line), `Refusal { code, message }` displayed as
   `"<code>: <message>"`.
 - `Workspace` (the ashlar document): tabs (`Editor { sql }` | `Table { table, filter }`), active
-  tab, chart panels. Proposals are **not** in the document (undo must never touch a decision);
+  tab, chart panels (`ChartSpec`; additive: `ChartKind::Pivot` and `ChartSpec.agg` for `viz.pivot`,
+  whose rows/columns/value columns are `x`/`series`/`y`; panel rows live in `quarry_viz::store`). Proposals are **not** in the document (undo must never touch a decision);
   they live in `crates/app/src/services.rs` (process-wide, see gaps).
 - `limits`: page 1,000 rows; agent row cap 5,000; timeout 15 s default / 30 s max; sample ≤ 100;
   proposal TTL 10 min; ≤ 20 pending proposals.

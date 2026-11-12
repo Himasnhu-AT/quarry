@@ -124,7 +124,9 @@ impl HumanAction {
     }
 }
 
-/// Run a human-only action. The ticket is consumed: one click, one action. M0: stub.
+/// Run a human-only action. The ticket is consumed: one click, one action. Approve / deny go to
+/// `crate::agent::approval` (approve also marks the proposal running: the caller runs
+/// `crate::agent::approval::execute` in a job).
 pub fn perform(_session: &mut Session<Workspace>, _ticket: HumanTicket, action: HumanAction) -> Result<Value, CommandError> {
     log::info!("human action {}", action.id());
     match action {
@@ -133,6 +135,8 @@ pub fn perform(_session: &mut Session<Workspace>, _ticket: HumanTicket, action: 
             crate::services::services().set_agent_paused(paused);
             Ok(json!({"paused": paused}))
         }
+        HumanAction::ApproveProposal(id) => crate::agent::approval::approve(id),
+        HumanAction::DenyProposal(id) => crate::agent::approval::deny(id),
         _ => Err(CommandError::failed(action.id(), Refusal::new(RefusalCode::NotYet, "not yet").to_string())),
     }
 }

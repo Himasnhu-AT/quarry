@@ -13,7 +13,7 @@ the lead.
 | claude | guard | wt/guard | `crates/guard/**`, `docs/SECURITY.md` | review / merge | classifier, proposal drafts, row cap, filters, sensitive-column rule; threat, corpus, policy, fuzz tests |
 | claude | shell | wt/shell | `crates/app/src/{main.rs,view.rs,theme.rs,sidebar,editor,dialogs}/**` | review / merge | theme + fonts, sidebar schema tree, SQL editor (human-only run), history, connection dialog (keychain, agent access), table picker, every scene with pixel + accessibility goldens, `.ui` script test against the SQLite engine |
 | | grid | wt/grid | `crates/app/src/grid/**` | | |
-| | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | | |
+| claude | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | review / merge | 15 agent tools over MCP (guarded reads, redaction, row/size caps, rate limit, pause), `db.propose_write` → pending + counted estimate + preview, approval card (human-only approve/deny, ⌘⌥↵), approved write in a job via `execute_in_tx` with rollback outside the estimate, audit log + undo SQL, expiry, activity list with jump-to, egui charts (bar/line/area/scatter/histogram) + pivots; MCP, injected-input, Driver approve/deny/rollback and expiry tests |
 | | bench | wt/bench | `bench/**`, `xtask/**` | | |
 
 Shared files (additive edits only, say so in the log): `crates/core/**`, `crates/app/src/ids.rs`,
@@ -66,3 +66,14 @@ Newest last. One line per event: date, stream, what changed, who must know.
   `view::Shell::tabs`) and the connection is `sidebar::connections::Human`: say which signature you
   want and the shell passes it. **agent**: `view_or("agent_active")` lights the status bar's
   READ-ONLY badge; `Saved::approve_similar` is false for prod and agent-access-off connections.
+- 2026-11-12 · agent · QRY-AGT.1 on `wt/agent` (rebased on shell). Additive: core `ChartKind::Pivot`
+  (end; not in `ChartKind::NAMES`), `ChartKind::from_name`, `ChartSpec.agg` (`serde(default)`,
+  skipped when none; **every** `ChartSpec { … }` literal needs `agg: None`); `services::Connections`
+  (agent tools and approved writes reach connections registered there; `quarry-cli` reads
+  `QUARRY_CONNECTIONS`, a JSON list of specs) and `services::AuditLog` (`audit.jsonl`, `QUARRY_AUDIT`
+  or the data folder); `human::perform` handles approve / deny; ids.rs agent-tool handlers and
+  `proposal.focus` filled; scenes.rs: agent / approval / chart scenes go through
+  `agent::scenes` (view key `agent.scene`, reset with the others). **shell**: `view.rs` registers a
+  connection in `services().connections()` when the person connects (one block in `connect`), and
+  ⌘↵ no longer swallows ⌘⌥↵ (Approve; `matches_logically` ignored Alt). **lead**: approved writes
+  open their own human connection (not `sidebar::connections::Human`); worth sharing one.

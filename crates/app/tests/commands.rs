@@ -41,10 +41,13 @@ fn read_only_db_tools_are_queries() {
 }
 
 #[test]
-fn stubs_fail_with_their_id_and_not_yet() {
+fn stubs_fail_with_their_id_and_not_yet_and_params_are_checked() {
     let mut h = quarry::app().headless();
-    let e = h.execute(ids::DB_QUERY, json!({"connection": "fixture", "sql": "SELECT 1"})).unwrap_err();
-    assert_eq!(e, CommandError::failed(ids::DB_QUERY, "not_yet: not yet"));
+    let e = h.execute(ids::QUERY_EXPLAIN, json!({})).unwrap_err();
+    assert_eq!(e, CommandError::failed(ids::QUERY_EXPLAIN, "not_yet: not yet"));
+    // agent tools are real (agent stream): an unknown connection is refused with its code
+    let e = h.execute(ids::DB_QUERY, json!({"connection": "nope", "sql": "SELECT 1"})).unwrap_err();
+    assert!(e.to_string().contains("unknown_connection"), "{e}");
     // params are validated against the contract before the stub runs
     let bad = h.execute(ids::DB_QUERY, json!({"connection": "fixture", "sql": "SELECT 1", "limit": 5001})).unwrap_err();
     assert!(matches!(bad, CommandError::BadParams { .. }), "{bad:?}");

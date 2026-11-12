@@ -306,6 +306,12 @@ impl Shell {
             let id = spec.id.clone();
             let ev = match quarry_engine::engine(spec.engine()).connect_human(&spec, secret.as_ref()) {
                 Ok(mut h) => {
+                    // agent tools reach only connections the person opened (agent stream)
+                    let agent_secret = match spec.engine() {
+                        EngineKind::Postgres => read_secret(&spec.id),
+                        EngineKind::Sqlite => None,
+                    };
+                    crate::services::services().connections().register(spec.clone(), agent_secret);
                     let cancel = h.cancel_token();
                     let schema = h.schema(&SchemaFilter { max_tables: MAX_TABLES, ..Default::default() }).map_err(|e| e.to_string());
                     Event::Connected { id, human: Arc::new(Mutex::new(h)), cancel, schema }
@@ -417,8 +423,12 @@ impl Shell {
         if let Some(t) = HumanTicket::from_shortcut(&ctx, &all) {
             self.run(cx, t, RunScope::All);
         }
+        // ⌘⌥↵ is the agent card's Approve (crate::agent::APPROVE_SHORTCUT): ⌘↵ would match it
+        // logically and swallow it
+        let alt_enter =
+            ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if modifiers.alt)));
         let one = KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter);
-        if let Some(t) = HumanTicket::from_shortcut(&ctx, &one) {
+        if !alt_enter && let Some(t) = HumanTicket::from_shortcut(&ctx, &one) {
             self.run(cx, t, RunScope::Statement);
         }
     }

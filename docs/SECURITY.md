@@ -139,6 +139,16 @@ statement joins). `approve_similar_allowed()` is false for anything but bounded 
 - Every proposal and decision goes to the audit log (`audit.jsonl`, append-only): time, actor, SQL,
   rows affected, and, for row edits, generated inverse statements so the human can undo.
 - Proposals expire after 10 minutes.
+- In the app (`crates/app/src/agent`): agent tools reach only connections the person opened in
+  the window (`services().connections()`); `db.query`, `db.sample` and `viz.*` take
+  `classify` → `cap_rows` → the agent connection → `redact`, and also refuse `EXPLAIN ANALYZE`
+  (`db.explain` takes `analyze: false` only) until the owner decides (PLAN §11). An approved write
+  runs exactly the proposal's text, re-checked as one statement by `propose_write`, with the counted
+  estimate as `execute_in_tx`'s check (tolerance 10 %); a proposal without an estimate (INSERT,
+  joins, DDL) says so on the card and runs without a row check. Undo statements are written for
+  UPDATE / DELETE of ≤ 20 rows with a known key. Agent scenes (`ui.scene`) only change view state.
+  Tests: `crates/app/tests/agent_mcp.rs`, `agent_approval.rs` (injected `ui.click` / `ui.press` /
+  `.ui` script on Approve do nothing; a real click or key press approves), `agent_expiry.rs`.
 
 ## Layer D: limits
 - Statement timeout (default 15 s) and row cap (default 5,000) on agent queries.

@@ -2,7 +2,7 @@
 //! golden screenshots. Streams add scenes additively and make existing ones richer.
 
 use ashlar::prelude::*;
-use quarry_core::{ChartKind, ChartSpec, ConnectionId, PanelId, Tab, TabId, TabKind, Workspace};
+use quarry_core::{ConnectionId, Tab, TabId, TabKind, Workspace};
 
 type S = Session<Workspace>;
 
@@ -63,32 +63,17 @@ pub fn setup(name: &str, s: &mut S) {
         }
         "connection-dialog" => s.set_view("dialog", &"connection"),
         "agent-panel" | "agent-paused" => {
-            s.set_view("agent_panel", &true);
+            crate::agent::scenes::setup(name, s);
             if name == "agent-paused" {
                 s.set_view("agent_state", &"paused");
             }
         }
         _ if name.starts_with("approval-") => {
-            s.set_view("agent_panel", &true);
-            s.set_view("proposal", &name.trim_start_matches("approval-"));
+            crate::agent::scenes::setup(name, s);
         }
         "chart" => {
-            let tab = editor_tab(s, "SELECT status, count(*) FROM orders GROUP BY status");
-            s.edit("Scene", |w| {
-                let panel = PanelId(w.next_id());
-                w.charts.push(ChartSpec {
-                    panel,
-                    kind: ChartKind::Bar,
-                    connection: ConnectionId::new("fixture"),
-                    sql: "SELECT status, count(*) FROM orders GROUP BY status".into(),
-                    x: "status".into(),
-                    y: Some("count".into()),
-                    series: None,
-                    title: "Orders by status".into(),
-                    by_agent: true,
-                    tab: Some(tab),
-                });
-            });
+            editor_tab(s, "SELECT status, count(*) AS n FROM orders GROUP BY status");
+            crate::agent::scenes::pin_demo_chart(s);
         }
         // "empty", "connecting", "disconnected": the screen marker only, for now
         _ => {}
@@ -98,7 +83,7 @@ pub fn setup(name: &str, s: &mut S) {
 /// The shell's part of a scene: demo connections, the open tree nodes and dialogs.
 fn shell(name: &str, s: &mut S) {
     // a scene applied to a running window starts from a clean view state
-    for key in ["scene.connections", "scene.select", "scene.menu", "scene.dialog", "proposal"] {
+    for key in ["scene.connections", "scene.select", "scene.menu", "scene.dialog", "proposal", crate::agent::SCENE_KEY] {
         s.set_view_value(key, Value::Null);
     }
     s.set_view("scene.expand", &Vec::<String>::new());

@@ -67,13 +67,30 @@ pub enum ChartKind {
     Area,
     Scatter,
     Histogram,
+    /// A pivot table panel (`viz.pivot`; additive, agent stream). Not a `viz.chart` kind.
+    Pivot,
 }
 
 impl ChartKind {
+    /// The `viz.chart` kinds (`Pivot` is made by `viz.pivot`).
     pub const NAMES: &'static [&'static str] = &["bar", "line", "area", "scatter", "histogram"];
+
+    /// The kind named `name` (one of [`ChartKind::NAMES`], or `pivot`).
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "bar" => ChartKind::Bar,
+            "line" => ChartKind::Line,
+            "area" => ChartKind::Area,
+            "scatter" => ChartKind::Scatter,
+            "histogram" => ChartKind::Histogram,
+            "pivot" => ChartKind::Pivot,
+            _ => return None,
+        })
+    }
 }
 
-/// A chart panel (`viz.chart` or the human).
+/// A chart panel (`viz.chart` or the human), or a pivot table (`viz.pivot`: `x` is the rows
+/// column, `series` the columns column, `y` the value column, `agg` the aggregate).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChartSpec {
     pub panel: PanelId,
@@ -92,6 +109,9 @@ pub struct ChartSpec {
     /// The tab it sits next to.
     #[serde(default)]
     pub tab: Option<TabId>,
+    /// Pivot only: `count`, `sum`, `avg`, `min` or `max` (additive, agent stream).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agg: Option<String>,
 }
 
 /// A focusable region of the window (`view.focus`).
