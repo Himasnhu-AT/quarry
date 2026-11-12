@@ -30,8 +30,9 @@ pub enum TestState {
     Failed(String),
 }
 
-/// What is being typed into the dialog. The password stays here (and then the keychain) only.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What is being typed into the dialog. The password stays here (and then the keychain) only;
+/// no `Debug`, so it never reaches a log.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Draft {
     pub editing: Option<ConnectionId>,
     pub name: String,

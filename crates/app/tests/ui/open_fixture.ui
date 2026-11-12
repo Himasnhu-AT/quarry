@@ -6,7 +6,7 @@ exec conn.open '{"connection": "fixture"}'
 click text=orders
 press Right
 wait --text "total_cents"
-assert exists id=quarry.tree.column.fixture
+assert exists id=quarry.tree.table.fixture.main.orders.total_cents
 exec tab.new_editor '{"connection": "fixture"}'
 fill id=quarry.editor "SELECT id, status FROM orders ORDER BY id LIMIT 5"
 assert exists id=quarry.toolbar.run
