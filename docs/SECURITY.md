@@ -34,7 +34,7 @@ No single layer is trusted. Each one below would stop a write on its own.
   `pg_reload_conf`, `pg_advisory_*`, `set_config`, `query_to_xml`, `txid_current`, any function not on
   the list (user-defined functions can write: they are unknown, so denied unless the human marks them
   safe).
-- The same classifier checks filters the agent passes to `ui.filter`.
+- The same classifier checks filters the agent passes to `view.filter`.
 
 ## Layer C: writes only through proposals
 - `db.propose_write(sql, reason)` stores a `Proposal` and shows an **approval card** in the agent
@@ -45,9 +45,12 @@ No single layer is trusted. Each one below would stop a write on its own.
   timeout), and for small changes a preview of the rows before/after.
 - Buttons: **Approve** and **Deny**. "Approve similar for this session" exists but is never the
   default and never applies to DDL, DELETE without WHERE, or prod-colored connections.
-- Approve/Deny are commands that only the human surfaces can run (window, menu, palette). MCP and
-  the CLI cannot call them: the command registry marks them `human_only`, and the MCP server refuses
-  them. Approving requires a real click or keypress in the window.
+- Approve/Deny can only be done in the window. ashlar 0.2 cannot keep a registered command off MCP,
+  the CLI or the control port, so they are not commands at all: they are absent from every agent
+  surface and run only through `human::perform`, which needs a `HumanTicket` minted from a real
+  click or key press while no control-port input is being injected (`devtools::has_pending`). The
+  same holds for every other write path: running SQL on the human's connection, committing edits,
+  saving a connection's agent access, pausing / resuming the agent (docs/contracts.md).
 - An approved write runs in one transaction on the human's connection. If the affected row count
   differs from the estimate by more than the threshold shown on the card, it rolls back and asks
   again.
@@ -63,7 +66,7 @@ No single layer is trusted. Each one below would stop a write on its own.
 - Per-minute tool rate limit; result size cap per call.
 
 ## Layer E: what the agent may do freely
-UI navigation (`ui.*`), charts and pivots (`viz.*`) on read-only queries, reading schema and samples.
+UI navigation (`view.*`), charts and pivots (`viz.*`) on read-only queries, reading schema and samples.
 These change nothing in the database.
 
 ## Threat model
@@ -80,7 +83,8 @@ These change nothing in the database.
 | SQLite ATTACH | `ATTACH 'other.db' AS x` then write | B; authorizer denies ATTACH; read-only open |
 | Session tampering | `SET default_transaction_read_only = off` | B denies SET; each statement in `BEGIN READ ONLY` |
 | Locking / DoS | `SELECT … FOR UPDATE`, huge cross joins | B denies FOR UPDATE; timeout; row cap |
-| Approval by the agent itself | MCP calls `proposal.approve` | human-only commands; MCP refuses |
+| Approval by the agent itself | MCP calls `proposal.approve`; agent clicks Approve via `ui.click` | not a command; `HumanTicket` refused while agent input is injected |
+| Write through the human's tools | agent calls `view.run_in_editor` then runs it, or stages edits and commits | `query.run` / `edit.commit` are human-only actions, not commands |
 | Approval fatigue | many small proposals | rate limit; batching shown as one card with every statement; no auto-approve default |
 | Secret exfiltration | agent asks for the connection string | tools never return secrets; redaction |
 
@@ -91,7 +95,9 @@ These change nothing in the database.
 - Against a real Postgres (CI container) with a superuser connection: every write in the corpus,
   sent through the agent path with layer B switched off, still fails (layer A alone holds).
 - Same for SQLite with the authorizer and read-only open.
-- `proposal.approve` is absent from the MCP tool list and refused if called by name.
+- `proposal.approve` (and every human-only action) is absent from the MCP tool list and refused if
+  called by name (in place: `crates/app/tests/mcp_shapes.rs`); a `ui.click` on the Approve button
+  through the control port does not approve.
 - Approved write with a row count over the estimate rolls back.
 - Redaction: sensitive columns never appear in any agent tool result.
 - Audit log: every proposal and decision recorded; undo statements restore a row edit.

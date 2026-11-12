@@ -1,6 +1,6 @@
 # Quarry plan
 
-Status: planning. Work starts after ashlar 0.2 is on crates.io.
+Status: M0 (contracts) done on `wt/contracts`; the contracts are in docs/contracts.md.
 
 ## 1. Users and jobs
 
@@ -20,7 +20,7 @@ keep open all day.
 - **Engines:** PostgreSQL 12+ and SQLite 3.
 - **Connections:** host/port/db/user, TLS modes (disable/prefer/require/verify-full, custom CA),
   SSH tunnel (key or agent), SQLite file picker; passwords in the OS keychain
-  (`ashlar_native::secrets`), never in settings files. Saved connections with colors (prod = red).
+  (`ashlar_native::secrets::Keychain`), never in settings files. Saved connections with colors (prod = red).
 - **Schema tree:** schemas, tables, views, columns with types, indexes, foreign keys; counts are
   estimates (`pg_class.reltuples`), never `COUNT(*)` on open.
 - **Result grid:** virtualized rows and columns, streaming from a server-side cursor
@@ -57,17 +57,21 @@ without asking; "Approval" = only creates a proposal the human approves in the w
 | `db.sample` | `connection`, `table`, `n≤100` | read only | `TABLESAMPLE` / `ORDER BY random()` with caps |
 | `db.propose_write` | `connection`, `sql`, `reason` | approval | returns `proposal_id`, status `pending`; never runs SQL itself |
 | `db.proposal_status` | `proposal_id` | read only | pending / approved / denied / failed + result |
-| `ui.open_table` | `connection`, `table` | UI | opens a tab, selects it |
-| `ui.run_in_editor` | `sql` | UI | puts SQL in a new editor tab; does not run writes |
-| `ui.filter` | `tab`, `where` | UI | the where clause goes through the classifier |
-| `ui.select` | `tab`, `rows`, `columns?` | UI | highlights cells the human should look at |
-| `ui.focus` | `region` | UI | sidebar, editor, grid, agent panel |
-| `viz.chart` | `kind` (bar, line, area, scatter, histogram), `sql`, `x`, `y`, `series?`, `title` | read only | runs the query read-only, draws a chart panel next to the grid |
-| `viz.pivot` | `sql`, `rows`, `columns`, `value`, `agg` | read only | pivot table panel |
+| `view.open_table` | `connection`, `table` | UI | opens a tab, selects it |
+| `view.run_in_editor` | `sql`, `connection?` | UI | puts SQL in a new editor tab; never runs it |
+| `view.filter` | `tab`, `where` | UI | the where clause goes through the classifier |
+| `view.select` | `tab`, `rows`, `columns?` | UI | highlights cells the human should look at |
+| `view.focus` | `region` | UI | sidebar, editor, grid, agent panel |
+| `viz.chart` | `kind` (bar, line, area, scatter, histogram), `connection`, `sql`, `x`, `y?`, `series?`, `title?` | read only | runs the query read-only, draws a chart panel next to the grid |
+| `viz.pivot` | `connection`, `sql`, `rows`, `columns`, `value`, `agg?` | read only | pivot table panel |
 | `viz.close` | `panel` | UI | |
 
 The window shows every agent action in the agent panel (tool, params, result size, time), so the human
 can see what the agent saw.
+
+The UI tools were `ui.*` in the first draft; ashlar 0.2's MCP server reserves `ui_*` tool names for
+its own window-driving tools (`ui_focus` exists, and a colliding command tool is dropped), so they
+are `view.*`. Exact params, result shapes and refusal codes: docs/contracts.md.
 
 ## 4. Architecture on ashlar
 
@@ -85,15 +89,22 @@ quarry/                       workspace
 - **Document:** `Workspace` (open tabs, editor texts, pending edits, pinned charts) is the ashlar
   document, so undo/redo, autosave and crash recovery come free. Connections live in settings
   (`ashlar-fs` settings), secrets in the keychain.
-- **Commands:** `cmd!`/`CommandSpec` for every action (`conn.open`, `query.run`, `query.cancel`,
-  `table.open`, `edit.commit`, `proposal.approve`, …); MCP tools are the same commands through
-  `ashlar-mcp` and the CLI (`quarry-cli exec`).
+- **Commands:** `cmd!`/`CommandSpec` for every action (`conn.open`, `query.cancel`, `table.open`,
+  …); MCP tools are the same commands through `ashlar-mcp` and the CLI (`quarry-cli exec`).
+  Exception: ashlar 0.2 cannot keep a command off MCP / the CLI / the control port, so the
+  human-only actions (`proposal.approve`/`deny`, `query.run`, `edit.commit`, `conn.save`,
+  `agent.pause`, …) are not commands but window-only actions behind a `HumanTicket`
+  (docs/contracts.md, "Human-only actions").
 - **Jobs:** queries, page fetches, schema loads and exports run with `ashlar-jobs`
-  (`spawn_streaming` for cursors, cancel through the job's cancel flag); results land on the UI
-  thread as revisions.
-- **UI:** `ashlar-ui` sidebar (schema tree), tabs, `VirtualTable` for the grid, `CodeView`-based SQL
-  editor with `ashlar-syntax`, `DiffView` for pending changes, chat kit (`Transcript`, `ToolCard`,
-  `Approval`) for the agent panel, toasts, forms for the connection dialog.
+  (`cx.jobs.job(kind, label).spawn_streaming(…)` for cursors, cancel through the job's
+  `Progress::is_cancelled`); results land on the UI thread as revisions. Jobs start from the view
+  (`Cx::jobs`); a command body cannot spawn one in 0.2.
+- **UI:** `ashlar::ui` sidebar and tree (schema), tabs, `virtual_list::VirtualTable` for the grid,
+  SQL editor = `egui::TextEdit` with a layouter from `code_view::highlight_job(Some("sql"), …)`
+  (`CodeView` itself is read-only: approval card, history), `diff_view::DiffView` for pending
+  changes, chat kit (`chat::{Transcript, ToolCard}`, `Approval` is its answer enum) for the agent
+  panel, toasts, `form` for the connection dialog. Keychain: `ashlar_native::secrets::Keychain`
+  (feature `secrets`, not enabled by `ashlar-rs`: depend on `ashlar-native` directly).
 - **Testing:** `--headless --snap/--tree`, `.ui` scripts on a virtual clock, golden screenshots of
   each screen with fixture databases (SQLite file + a Postgres container in CI).
 
@@ -163,12 +174,13 @@ Rules: report where others win, give versions, no numbers in marketing that aren
 The owner builds Quarry with parallel agents. Contracts first, then six streams.
 
 ### Shared contracts (frozen in M0; change only additively, tell every consumer and the lead)
-1. **Command ids and params:** the list in section 3 plus UI commands, in `crates/app/src/ids.rs`.
+1. **Command ids and params:** the list in section 3 plus UI commands, in `crates/app/src/ids.rs`
+   (agent tools, human commands, and human-only actions that are not registered).
 2. **Data types:** `crates/core` (section 5).
 3. **MCP tool schemas:** JSON schemas generated from the command params, snapshot-tested.
 4. **Write-approval contract:** `Proposal` + states `pending → approved → running → done | failed`,
-   `pending → denied | expired`; who may change state (only `proposal.approve`/`deny` commands from
-   the human surface; never MCP).
+   `pending → denied | expired`; who may change state (only `proposal.approve`/`deny` from the
+   window through a `HumanTicket`; never MCP, the CLI or the control port).
 5. **Engine trait:** `connect`, `schema`, `query(sql, Cursor)`, `fetch(page)`, `cancel`, `explain`,
    `execute_in_tx(statements)` (human connection only).
 

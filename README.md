@@ -7,7 +7,7 @@ unless you approve the exact statement first.
 Built in Rust on [ashlar](https://github.com/Himasnhu-AT/ashlar) (egui). One window, millions of rows,
 zero CPU when idle.
 
-> **Status:** planning. Development starts after ashlar 0.2 is released.
+> **Status:** early development (M0: contracts). Not usable yet.
 
 ## Why
 
@@ -25,13 +25,15 @@ zero CPU when idle.
 - Virtualized result grid over streaming cursors
 - Table editing with a pending-changes diff before commit
 - EXPLAIN plan view
-- MCP server: `db.schema`, `db.query` (read only), `db.explain`, `db.propose_write`, `ui.*`, `viz.chart`
+- MCP server: `db.schema`, `db.query` (read only), `db.explain`, `db.propose_write`, `view.*`, `viz.chart`
 
 ## Documents
 
 - [docs/PLAN.md](docs/PLAN.md): scope, architecture, MCP surface, benchmarks, milestones, parallel work
 - [docs/SECURITY.md](docs/SECURITY.md): how the agent is kept read-only
 - [docs/DESIGN.md](docs/DESIGN.md): screens, interactions, accessibility
+- [docs/contracts.md](docs/contracts.md): the frozen shared contracts (command ids, data types, MCP
+  results, write approval, engine trait) and the ashlar 0.2 gaps
 
 ## License
 

@@ -30,7 +30,7 @@ Dark-first native window, shared visual language with the other ashlar showcase 
   agent made link to their tab.
 - **Approval card** for `db.propose_write`: warn border + lock icon, "Agent wants to change data",
   connection chip, the exact SQL, reason, affected table(s), estimate ("~312 rows"), before/after
-  preview for ≤20 rows, buttons Deny (default focus) and Approve (requires click or ⌘⇧↵), note
+  preview for ≤20 rows, buttons Deny (default focus) and Approve (requires a click, or ⌘⌥↵ while the card has focus; ⇧⌘↵ is Run all), note
   "Runs in one transaction · logged in the audit log · undo available".
 
 ### Chart panel
@@ -43,8 +43,8 @@ access** section: Off / Read-only (default) / Read-only with role `quarry_agent`
 `CREATE ROLE` + `GRANT SELECT` SQL to run), sensitive column patterns. Test button with result.
 
 ## Interactions and keyboard
-⌘K palette, ⌘↵ run statement, ⌘T new editor tab, ⌘O open table, ⌘F filter grid, ⌘L agent panel,
-⌘⇧A focus approval card, F2 edit cell, ⌘S commit pending edits (shows the diff first), ⌘Z undo
+⌘K palette, ⌘↵ run statement, ⌘T new editor tab, ⌘P open table (⌘O is ashlar's File › Open), ⌘F filter grid, ⌘L agent panel,
+⌘⇧A focus approval card, F2 edit cell, ⌘⌥S review and commit pending edits (shows the diff first; ⌘S is ashlar's File › Save), ⌘Z undo
 pending edit.
 
 ## States
