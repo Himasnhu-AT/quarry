@@ -1,0 +1,24 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "panel": {
+        "description": "chart or pivot panel id",
+        "maximum": 9223372036854775807,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "panel"
+    ],
+    "type": "object"
+  },
+  "kind": "ui",
+  "mcp_name": "viz_close",
+  "mutates": true,
+  "result": {
+    "closed": 4
+  },
+  "tool": "viz.close"
+}

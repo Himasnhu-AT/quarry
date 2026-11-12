@@ -1,0 +1,33 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "columns": {
+        "description": "column names; default all"
+      },
+      "rows": {
+        "description": "row indexes [0, 5] or ranges [{\"from\": 0, \"to\": 9}]"
+      },
+      "tab": {
+        "description": "tab id",
+        "maximum": 9223372036854775807,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "tab",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "kind": "ui",
+  "mcp_name": "view_select",
+  "mutates": false,
+  "result": {
+    "columns": 2,
+    "rows": 5,
+    "tab": 3
+  },
+  "tool": "view.select"
+}

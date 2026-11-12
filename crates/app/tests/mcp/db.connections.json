@@ -1,0 +1,30 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "db_connections",
+  "mutates": false,
+  "result": {
+    "connections": [
+      {
+        "agent_access": "read_only",
+        "color": "staging",
+        "engine": "postgres",
+        "id": "staging",
+        "name": "Staging"
+      },
+      {
+        "agent_access": "read_only",
+        "color": "local",
+        "engine": "sqlite",
+        "id": "app-db",
+        "name": "app.sqlite"
+      }
+    ]
+  },
+  "tool": "db.connections"
+}

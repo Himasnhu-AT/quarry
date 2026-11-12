@@ -1,0 +1,14 @@
+[package]
+name = "quarry-viz"
+description = "Quarry's charts and pivot tables, drawn with the egui painter (no web view)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+quarry-core = { workspace = true }
+ashlar = { workspace = true }

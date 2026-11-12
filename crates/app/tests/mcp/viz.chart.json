@@ -1,0 +1,57 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "bar",
+          "line",
+          "area",
+          "scatter",
+          "histogram"
+        ],
+        "type": "string"
+      },
+      "series": {
+        "description": "column that splits series",
+        "type": "string"
+      },
+      "sql": {
+        "description": "exactly one SQL statement",
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "x": {
+        "description": "column for the x axis",
+        "type": "string"
+      },
+      "y": {
+        "description": "column for the y axis (not for histogram)",
+        "type": "string"
+      }
+    },
+    "required": [
+      "kind",
+      "connection",
+      "sql",
+      "x"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "viz_chart",
+  "mutates": true,
+  "result": {
+    "kind": "bar",
+    "panel": 4,
+    "row_count": 6,
+    "truncated": false
+  },
+  "tool": "viz.chart"
+}

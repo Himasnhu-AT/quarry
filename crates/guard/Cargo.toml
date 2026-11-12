@@ -1,0 +1,19 @@
+[package]
+name = "quarry-guard"
+description = "Quarry's SQL classifier and agent policy (SECURITY.md layers B and D)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# `ReadStatement::unchecked`: lets engine tests send SQL down the agent path with the classifier
+# switched off (SECURITY.md: "layer A alone holds"). Dev-dependencies only; never in a release.
+unchecked = []
+
+[dependencies]
+quarry-core = { workspace = true }
+sqlparser = { workspace = true }

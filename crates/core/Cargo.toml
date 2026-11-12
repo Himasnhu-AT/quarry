@@ -1,0 +1,15 @@
+[package]
+name = "quarry-core"
+description = "Quarry's shared data model: connections, values, pages, schema, proposals, audit (no I/O)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

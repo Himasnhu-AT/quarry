@@ -1,0 +1,27 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "table": {
+        "description": "table, optionally schema.table",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "table"
+    ],
+    "type": "object"
+  },
+  "kind": "ui",
+  "mcp_name": "view_open_table",
+  "mutates": true,
+  "result": {
+    "tab": 3
+  },
+  "tool": "view.open_table"
+}

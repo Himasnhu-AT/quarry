@@ -1,0 +1,23 @@
+[package]
+name = "quarry-engine"
+description = "Quarry's database engines: the Engine trait, PostgreSQL (tokio-postgres) and SQLite (rusqlite)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+quarry-core = { workspace = true }
+quarry-guard = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+tokio-postgres = { workspace = true }
+tokio = { workspace = true }
+rusqlite = { workspace = true }
+
+[dev-dependencies]
+quarry-guard = { workspace = true, features = ["unchecked"] }
+tempfile = { workspace = true }

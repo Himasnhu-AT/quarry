@@ -1,0 +1,26 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id",
+        "type": "string"
+      },
+      "sql": {
+        "description": "shown, not run",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sql"
+    ],
+    "type": "object"
+  },
+  "kind": "ui",
+  "mcp_name": "view_run_in_editor",
+  "mutates": true,
+  "result": {
+    "tab": 3
+  },
+  "tool": "view.run_in_editor"
+}

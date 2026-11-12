@@ -1,0 +1,46 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "analyze": {
+        "description": "run it to measure (read-only statements only); default false",
+        "type": "boolean"
+      },
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "sql": {
+        "description": "exactly one SQL statement",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "sql"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "db_explain",
+  "mutates": false,
+  "result": {
+    "analyzed": false,
+    "connection": "staging",
+    "elapsed_ms": 3,
+    "plan": {
+      "children": [
+        {
+          "est_rows": 10000000.0,
+          "op": "Seq Scan",
+          "relation": "orders",
+          "total_cost": 800.0
+        }
+      ],
+      "est_rows": 1000.0,
+      "op": "Hash Join",
+      "total_cost": 1234.5
+    }
+  },
+  "tool": "db.explain"
+}

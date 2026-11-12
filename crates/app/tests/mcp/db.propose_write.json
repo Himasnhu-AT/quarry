@@ -1,0 +1,35 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "reason": {
+        "description": "why, shown to the person",
+        "type": "string"
+      },
+      "sql": {
+        "description": "the exact statement(s) to run after approval",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "sql",
+      "reason"
+    ],
+    "type": "object"
+  },
+  "kind": "approval",
+  "mcp_name": "db_propose_write",
+  "mutates": true,
+  "result": {
+    "expires_at": 1731400600000,
+    "note": "A person must approve this in the Quarry window. Poll db.proposal_status.",
+    "proposal_id": 7,
+    "status": "pending"
+  },
+  "tool": "db.propose_write"
+}

@@ -1,0 +1,76 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "n": {
+        "description": "rows (default 20)",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "table": {
+        "description": "table, optionally schema.table",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "table"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "db_sample",
+  "mutates": false,
+  "result": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "int8"
+      },
+      {
+        "name": "email",
+        "type": "text"
+      },
+      {
+        "name": "password_hash",
+        "sensitive": true,
+        "type": "text"
+      },
+      {
+        "name": "avatar",
+        "type": "bytea"
+      }
+    ],
+    "connection": "staging",
+    "elapsed_ms": 42,
+    "row_count": 2,
+    "rows": [
+      [
+        1,
+        "ada@example.com",
+        {
+          "$redacted": 60
+        },
+        {
+          "$bytes": 2048,
+          "$hex": "8950"
+        }
+      ],
+      [
+        2,
+        null,
+        {
+          "$redacted": 60
+        },
+        null
+      ]
+    ],
+    "truncated": false
+  },
+  "tool": "db.sample"
+}

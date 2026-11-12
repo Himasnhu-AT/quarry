@@ -1,0 +1,45 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "proposal_id": {
+        "maximum": 9223372036854775807,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "proposal_id"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "db_proposal_status",
+  "mutates": false,
+  "result": {
+    "connection": "staging",
+    "decided_at": 1731400030000,
+    "estimate": {
+      "exact": true,
+      "rows": 1,
+      "tolerance": 0
+    },
+    "expires_at": 1731400600000,
+    "proposal_id": 7,
+    "reason": "customer asked for a refund",
+    "requested_at": 1731400000000,
+    "result": {
+      "outcome": "done",
+      "rows_affected": 1
+    },
+    "sql": "UPDATE orders SET status = 'refunded' WHERE id = 42",
+    "status": "done",
+    "tables": [
+      {
+        "name": "orders",
+        "schema": "public"
+      }
+    ]
+  },
+  "tool": "db.proposal_status"
+}

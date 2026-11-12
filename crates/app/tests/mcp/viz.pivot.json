@@ -1,0 +1,56 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "agg": {
+        "description": "default count",
+        "enum": [
+          "count",
+          "sum",
+          "avg",
+          "min",
+          "max"
+        ],
+        "type": "string"
+      },
+      "columns": {
+        "description": "column for pivot columns",
+        "type": "string"
+      },
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "rows": {
+        "description": "column for pivot rows",
+        "type": "string"
+      },
+      "sql": {
+        "description": "exactly one SQL statement",
+        "type": "string"
+      },
+      "value": {
+        "description": "column aggregated in cells",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "sql",
+      "rows",
+      "columns",
+      "value"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "viz_pivot",
+  "mutates": true,
+  "result": {
+    "column_count": 4,
+    "panel": 5,
+    "row_count": 12,
+    "truncated": false
+  },
+  "tool": "viz.pivot"
+}

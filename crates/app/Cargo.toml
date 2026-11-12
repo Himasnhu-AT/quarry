@@ -1,0 +1,36 @@
+[package]
+name = "quarry"
+description = "Quarry: a fast database browser an AI agent can use safely"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+default-run = "quarry"
+
+[lints]
+workspace = true
+
+[lib]
+name = "quarry"
+path = "src/lib.rs"
+
+[[bin]]
+name = "quarry"
+path = "src/main.rs"
+
+[[bin]]
+name = "quarry-cli"
+path = "src/bin/quarry-cli.rs"
+
+[dependencies]
+quarry-core = { workspace = true }
+quarry-guard = { workspace = true }
+quarry-engine = { workspace = true }
+quarry-viz = { workspace = true }
+ashlar = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

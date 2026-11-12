@@ -1,0 +1,30 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "tab": {
+        "description": "tab id",
+        "maximum": 9223372036854775807,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "where": {
+        "description": "a WHERE clause; checked by the guard",
+        "type": "string"
+      }
+    },
+    "required": [
+      "tab",
+      "where"
+    ],
+    "type": "object"
+  },
+  "kind": "ui",
+  "mcp_name": "view_filter",
+  "mutates": true,
+  "result": {
+    "tab": 3,
+    "where": "status = 'refunded'"
+  },
+  "tool": "view.filter"
+}

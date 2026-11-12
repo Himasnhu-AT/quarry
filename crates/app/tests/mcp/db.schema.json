@@ -1,0 +1,94 @@
+{
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "connection": {
+        "description": "connection id from db.connections",
+        "type": "string"
+      },
+      "schema": {
+        "description": "only this schema",
+        "type": "string"
+      },
+      "table": {
+        "description": "only this table, with columns, keys and indexes",
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection"
+    ],
+    "type": "object"
+  },
+  "kind": "read_only",
+  "mcp_name": "db_schema",
+  "mutates": false,
+  "result": {
+    "connection": "staging",
+    "namespaces": [
+      {
+        "name": "public",
+        "tables": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "nullable": false,
+                "primary_key": true,
+                "type": "int8"
+              },
+              {
+                "name": "customer_id",
+                "nullable": false,
+                "type": "int8"
+              },
+              {
+                "default": "'pending'::text",
+                "name": "status",
+                "nullable": false,
+                "type": "text"
+              }
+            ],
+            "foreign_keys": [
+              {
+                "columns": [
+                  "customer_id"
+                ],
+                "name": "orders_customer_id_fkey",
+                "ref_columns": [
+                  "id"
+                ],
+                "references": {
+                  "name": "customers",
+                  "schema": "public"
+                }
+              }
+            ],
+            "indexes": [
+              {
+                "columns": [
+                  "id"
+                ],
+                "name": "orders_pkey",
+                "primary": true,
+                "unique": true
+              },
+              {
+                "columns": [
+                  "customer_id"
+                ],
+                "name": "orders_customer",
+                "unique": false
+              }
+            ],
+            "kind": "table",
+            "name": "orders",
+            "row_estimate": 10000000
+          }
+        ]
+      }
+    ],
+    "truncated": false
+  },
+  "tool": "db.schema"
+}
