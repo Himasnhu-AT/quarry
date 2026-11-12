@@ -12,10 +12,8 @@ the lead.
 | claude | engine | wt/engine | `crates/engine/**` | M1 done; Postgres suite written, not yet run against a server (no `QUARRY_PG_URL`, Docker off) | SQLite + PostgreSQL backends, layer A guards, cursors, cancel, EXPLAIN, `execute_in_tx`, 1M-row bench |
 | claude | guard | wt/guard | `crates/guard/**`, `docs/SECURITY.md` | review / merge | classifier, proposal drafts, row cap, filters, sensitive-column rule; threat, corpus, policy, fuzz tests |
 | claude | shell | wt/shell | `crates/app/src/{main.rs,view.rs,theme.rs,sidebar,editor,dialogs}/**` | review / merge | theme + fonts, sidebar schema tree, SQL editor (human-only run), history, connection dialog (keychain, agent access), table picker, every scene with pixel + accessibility goldens, `.ui` script test against the SQLite engine |
-| | grid | wt/grid | `crates/app/src/grid/**` | | |
 | claude | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | review / merge | 15 agent tools over MCP (guarded reads, redaction, row/size caps, rate limit, pause), `db.propose_write` → pending + counted estimate + preview, approval card (human-only approve/deny, ⌘⌥↵), approved write in a job via `execute_in_tx` with rollback outside the estimate, audit log + undo SQL, expiry, activity list with jump-to, egui charts (bar/line/area/scatter/histogram) + pivots; MCP, injected-input, Driver approve/deny/rollback and expiry tests |
 | claude | grid | wt/grid | `crates/app/src/grid/**` | review / merge | streaming grid on VirtualTable (page cache, cancel, 500k-row windows), sort (re-query / client), columns hide/reorder/freeze, cell popover, multi-cell copy TSV/CSV/JSON/INSERT, pending edits + DiffView/SQL, wired to the shell's runs; scenes, goldens, `.ui` script, scroll bench |
-| | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | | |
 | | bench | wt/bench | `bench/**`, `xtask/**` | | |
 
 Shared files (additive edits only, say so in the log): `crates/core/**`, `crates/app/src/ids.rs`,
