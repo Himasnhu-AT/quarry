@@ -3147,6 +3147,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarry-bench"
+version = "0.0.1"
+dependencies = [
+ "ashlar-rs",
+ "quarry",
+ "quarry-core",
+ "quarry-engine",
+ "serde_json",
+]
+
+[[package]]
 name = "quarry-core"
 version = "0.0.1"
 dependencies = [
@@ -5132,6 +5143,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "rusqlite",
+ "serde_json",
  "tempfile",
 ]
 

@@ -104,3 +104,8 @@ Newest last. One line per event: date, stream, what changed, who must know.
   `postgres engine` job also runs `cargo test -p quarry --test agent_pg` (installs the GTK libs).
   Re-blessed `grid-edits` (macOS key names already matched the approval goldens). Committing clears the undo history (undo must not
   bring committed edits back).
+- 2026-11-12 · bench · QRY-BENCH.1 on `wt/bench`. Additive shared edits: root `Cargo.toml` adds
+  `bench` to the workspace members (new crate `quarry-bench`, publish = false, depends on `quarry`);
+  `xtask` gains `serde_json`. **finish / shell**: a table tab (`table.open`) shows no rows yet, so
+  the bench reports "open a table" as not measurable; once it loads, `cargo xtask bench` measures it
+  with no change. **grid**: scroll p95/p99 are over the 1 ms budget (docs/benchmarks.md).

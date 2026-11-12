@@ -6,19 +6,23 @@
 //!   `customers`, `orders` and `events` for the grid and bench streams. `N` (default 100k) is the
 //!   number of orders and of events (`10M`, `250k` and plain numbers work); customers are N/10.
 //!   Default output: `fixtures/quarry-<N>.sqlite`.
+//! - `bench [--quick] [--runs N] [--no-launch] [--out PATH]`: Quarry's published numbers
+//!   (`bench.rs`, docs/benchmarks.md). Opens real windows; never run by CI.
 
+mod bench;
 mod fixtures;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-const USAGE: &str = "usage: cargo xtask <ci | fixtures [--rows N] [--out PATH] [--seed S]>";
+const USAGE: &str = "usage: cargo xtask <ci | fixtures [--rows N] [--out PATH] [--seed S] | bench [--quick] [--runs N] [--no-launch] [--out PATH]>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("ci") => ci(),
         Some("fixtures") => fixtures_cmd(args.get(1..).unwrap_or_default()),
+        Some("bench") => bench::bench(&root(), args.get(1..).unwrap_or_default()),
         _ => Err(USAGE.to_string()),
     };
     match result {

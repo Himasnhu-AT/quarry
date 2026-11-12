@@ -1,0 +1,21 @@
+[package]
+name = "quarry-bench"
+description = "Quarry's benchmark probes, driven by `cargo xtask bench` (docs/benchmarks.md)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "quarry-bench"
+path = "src/main.rs"
+
+[dependencies]
+quarry = { path = "../crates/app" }
+quarry-core = { workspace = true }
+quarry-engine = { workspace = true }
+ashlar = { workspace = true }
+serde_json = { workspace = true }
