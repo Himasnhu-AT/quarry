@@ -1,0 +1,3 @@
+# Check out every text file with LF line endings on every OS. Tests compare goldens byte for
+# byte, and Windows would otherwise turn them into CRLF.
+* text=auto eol=lf

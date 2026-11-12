@@ -1,0 +1,7 @@
+# The toolchain for development and CI (same as ashlar's), so a new stable release and its new
+# clippy lints never change the result of `cargo xtask ci` by itself. Bump it on purpose, in its
+# own commit, after `cargo xtask ci` passes on the new version.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

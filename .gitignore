@@ -2,3 +2,6 @@
 .claude/worktrees/
 *.sqlite-journal
 .DS_Store
+
+# fixture databases (`cargo xtask fixtures`)
+/fixtures/

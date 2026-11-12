@@ -1,0 +1,51 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+# ashlar 0.2's MSRV; development and CI use rust-toolchain.toml
+rust-version = "1.95"
+publish = false
+repository = "https://github.com/Himasnhu-AT/quarry"
+
+[workspace.dependencies]
+# internal (rank 0: core, guard; rank 1: engine; rank 2: app, viz)
+quarry-core = { path = "crates/core" }
+quarry-guard = { path = "crates/guard" }
+quarry-engine = { path = "crates/engine" }
+quarry-viz = { path = "crates/viz" }
+# published as `ashlar-rs`; imported as `ashlar`
+ashlar = { package = "ashlar-rs", version = "0.2" }
+# foundation
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+log = "0.4"
+# SQL
+sqlparser = "0.64"
+tokio-postgres = "0.7"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+# bundled: the same SQLite on every OS, no system library needed
+rusqlite = { version = "0.42", features = ["bundled"] }
+# tests
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# never crash (AGENTS.md §0): one place for every crate; tests are exempted by clippy.toml
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+dbg_macro = "warn"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.release]
+debug = "line-tables-only"
