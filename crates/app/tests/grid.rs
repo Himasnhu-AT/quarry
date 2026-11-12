@@ -62,17 +62,19 @@ fn deferred_sources_stream_through_jobs_and_cancel_stale_fetches() {
     let tab = TAB;
     let src = grid::source::MemSource::generated(3_000_000, Arc::new(|i| vec![Value::Int(i as i64), Value::text(format!("row {i}"))])).deferred();
     let g = GridState::open(Arc::from(vec![Column::new("n", "int8"), Column::new("label", "text")]), Total::AtLeast(0), Box::new(src));
-    grid::attach(tab, g);
+    grid::last_window::attach(tab, g);
     // the first pages arrive from jobs, a frame at a time
     for _ in 0..200 {
         d.advance(0.02);
-        if grid::with_grid(tab, |g, _| g.cell(5, 1).cloned()).flatten().is_some() {
+        // jobs run on real threads
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        if grid::last_window::with_grid(tab, |g, _| g.cell(5, 1).cloned()).flatten().is_some() {
             break;
         }
     }
-    assert_eq!(grid::with_grid(tab, |g, _| g.cell(5, 1).cloned()).flatten(), Some(Value::text("row 5")));
+    assert_eq!(grid::last_window::with_grid(tab, |g, _| g.cell(5, 1).cloned()).flatten(), Some(Value::text("row 5")));
     // jump far down: only pages around the new viewport are kept
-    grid::with_grid(tab, |g, _| {
+    grid::last_window::with_grid(tab, |g, _| {
         g.total = Total::Known(3_000_000);
         g.set_window(2_600_000);
         // window-relative: the window starts at 2,500,000
@@ -80,15 +82,17 @@ fn deferred_sources_stream_through_jobs_and_cancel_stale_fetches() {
     });
     for _ in 0..200 {
         d.advance(0.02);
-        if grid::with_grid(tab, |g, _| g.cell(2_600_010, 1).cloned()).flatten().is_some() {
+        // jobs run on real threads
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        if grid::last_window::with_grid(tab, |g, _| g.cell(2_600_010, 1).cloned()).flatten().is_some() {
             break;
         }
     }
-    let (pages, near, far) = grid::with_grid(tab, |g, _| (g.cache.footprint().0, g.cell(2_600_010, 1).cloned(), g.cell(5, 1).cloned())).unwrap();
+    let (pages, near, far) =
+        grid::last_window::with_grid(tab, |g, _| (g.cache.footprint().0, g.cell(2_600_010, 1).cloned(), g.cell(5, 1).cloned())).unwrap();
     assert_eq!(near, Some(Value::text("row 2600010")));
     assert_eq!(far, None, "the first pages were evicted");
     assert!(pages <= 4, "{pages} pages kept");
-    grid::detach(tab);
 }
 
 #[test]
@@ -130,7 +134,7 @@ fn editing_a_cell_records_a_pending_change() {
     let src = grid::source::MemSource::new((0..10).map(|i| vec![Value::Int(i + 1), Value::text(format!("n{i}"))]).collect());
     let g = GridState::open(Arc::from(vec![Column::new("id", "int8"), Column::new("name", "text")]), Total::Known(10), Box::new(src))
         .editable(EditTarget { table: TableRef::new(None, "people"), key: vec![0] });
-    grid::attach(tab, g);
+    grid::last_window::attach(tab, g);
     d.settle(10);
     d.call("ui.click", json!({"target": {"id": "quarry.grid.table.row.3"}})).unwrap();
     d.settle(5);
@@ -139,7 +143,6 @@ fn editing_a_cell_records_a_pending_change() {
     d.call("ui.fill", json!({"target": {"id": "quarry.grid.editor"}, "text": "Grace", "submit": true})).unwrap();
     d.settle(10);
     assert_eq!(pending(&mut d), "Pending: 1 cell changed");
-    grid::detach(tab);
 }
 
 /// What a screen reader is told about the visible part of the grid.
@@ -192,10 +195,87 @@ fn grid_scenes_match_golden_snapshots() {
         ..ashlar_debug::Snapshots::from_env()
     };
     for scene in ["results", "query-running", "query-error", "grid-loading", "grid-values", "grid-edits", "grid-wide"] {
+        // a fresh folder per scene: the window keeps layout in settings
+        let dir = tempfile::tempdir_in(dir.path()).unwrap();
         let mut d = driver(dir.path(), Renderer::wgpu());
         d.scene(scene).unwrap();
         d.settle(60);
-        let out = d.check_snapshot(&format!("grid-{}", scene.trim_start_matches("grid-")), &snaps, Some(json!({"id": "quarry.grid"})));
+        // `grid-region-*`: the shell's test owns `<scene>.png` (the whole window)
+        let out = d.check_snapshot(&format!("grid-region-{}", scene.trim_start_matches("grid-")), &snaps, Some(json!({"id": "quarry.grid"})));
         assert!(out.is_ok(), "{scene}: {out:?}");
     }
+}
+
+/// A real run on a SQLite file: the shell opens the cursor and hands it to the grid, which
+/// fetches the pages after the first one in jobs as the person scrolls.
+#[test]
+fn a_real_run_streams_past_the_first_page() {
+    use quarry_core::{AgentAccess, ConnColor, ConnectionId, ConnectionSpec, Target};
+    let _g = serial();
+    let tmp = tempfile::tempdir().unwrap();
+    let db = tmp.path().join("fixture.sqlite");
+    let c = rusqlite::Connection::open(&db).unwrap();
+    c.execute_batch("CREATE TABLE orders (id INTEGER PRIMARY KEY, status TEXT NOT NULL, note TEXT);").unwrap();
+    c.execute_batch("BEGIN").unwrap();
+    for i in 1..=3_000 {
+        c.execute("INSERT INTO orders VALUES (?1, ?2, ?3)", rusqlite::params![i, format!("s{i}"), if i % 2 == 0 { None } else { Some("n") }])
+            .unwrap();
+    }
+    c.execute_batch("COMMIT").unwrap();
+    drop(c);
+    let spec = ConnectionSpec {
+        id: ConnectionId::new("fixture"),
+        name: "fixture".into(),
+        target: Target::Sqlite { path: db.clone() },
+        color: ConnColor::Local,
+        agent_access: AgentAccess::ReadOnly,
+        sensitive_patterns: vec![],
+        human_read_only: false,
+    };
+    let config = tmp.path().join("config");
+    std::fs::create_dir_all(&config).unwrap();
+    let saved = json!({"schema_version": 1, "values": {"quarry.connections": [{"spec": spec, "approve_similar": false}]}});
+    std::fs::write(config.join("settings.json"), serde_json::to_string(&saved).unwrap()).unwrap();
+    let mut d = driver(tmp.path(), Renderer::none());
+    d.settle(30);
+    d.run_ui("exec conn.open '{\"connection\": \"fixture\"}'\nexec tab.new_editor '{\"connection\": \"fixture\"}'\n").unwrap();
+    let wait = |d: &mut Driver<Workspace>, what: &str, pred: &dyn Fn(&str) -> bool| {
+        let start = std::time::Instant::now();
+        loop {
+            d.advance(0.05);
+            let t = d.call("ui.snapshot", json!({"compact": true})).unwrap()["tree"].as_str().unwrap_or("").to_string();
+            if pred(&t) {
+                return t;
+            }
+            assert!(start.elapsed().as_secs() < 20, "timed out waiting for {what}:\n{t}");
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+    };
+    wait(&mut d, "the connection", &|t| t.contains("quarry.tree.table.fixture"));
+    d.run_ui("fill id=quarry.editor \"SELECT id, status, note FROM orders ORDER BY id\"\n").unwrap();
+    // the person's own key press runs it (injected input cannot)
+    let key = |pressed| ashlar::egui::Event::Key {
+        key: ashlar::egui::Key::Enter,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: ashlar::egui::Modifiers::COMMAND,
+    };
+    d.push_event(key(true));
+    d.push_event(key(false));
+    d.frame();
+    wait(&mut d, "the first rows", &|t| t.contains("quarry.grid.table.row.0"));
+    // past the first page (1,000 rows): fetched by a job from the same cursor
+    d.run_ui("scroll id=quarry.grid.table down 60000\nwait 300\n").unwrap();
+    // a short last page ended the cursor: the count is exact
+    wait(&mut d, "rows past the first page", &|t| t.contains("\"3,000 rows\"") && t.contains("quarry.grid.table.row.2"));
+    let rows = d.call("ui.snapshot", json!({"scope": {"id": "quarry.grid.table"}})).unwrap()["tree"].as_str().unwrap_or("").to_string();
+    let first = rows
+        .lines()
+        .find_map(|l| l.split("quarry.grid.table.row.").nth(1))
+        .and_then(|r| r.split(']').next())
+        .and_then(|n| n.parse::<u64>().ok())
+        .unwrap();
+    assert!(first > 1_000, "scrolled past the first page: {first}");
+    assert!(rows.contains(&format!("value=\"s{}\"", first + 1)), "the row's own values, fetched from the cursor:\n{rows}");
 }

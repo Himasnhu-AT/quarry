@@ -24,6 +24,7 @@ pub mod scenes;
 pub mod source;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use ashlar::egui;
@@ -43,41 +44,94 @@ pub struct Slot {
     pub draw: DrawState,
 }
 
-type Registry = Mutex<HashMap<TabId, Arc<Mutex<Slot>>>>;
+/// Grids of every window in the process, by (window, tab). A window is one session: its key
+/// lives in its view state ([`window`]), so two sessions (two windows, parallel tests) never
+/// share a tab's grid.
+type Registry = Mutex<HashMap<(u64, TabId), Arc<Mutex<Slot>>>>;
 
-fn registry() -> MutexGuard<'static, HashMap<TabId, Arc<Mutex<Slot>>>> {
+/// The view-state key holding a session's window key.
+const WINDOW_KEY: &str = "grid.window";
+
+fn registry() -> MutexGuard<'static, HashMap<(u64, TabId), Arc<Mutex<Slot>>>> {
     static R: OnceLock<Registry> = OnceLock::new();
     R.get_or_init(Registry::default).lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn slot(tab: TabId) -> Option<Arc<Mutex<Slot>>> {
-    registry().get(&tab).cloned()
+/// The most recent window key handed out (tests and benches drive one window at a time).
+static LAST_WINDOW: AtomicU64 = AtomicU64::new(0);
+
+/// This session's window key, handed out on first use.
+pub fn window(s: &mut Session<Workspace>) -> u64 {
+    if let Some(w) = s.view::<u64>(WINDOW_KEY).filter(|w| *w > 0) {
+        return w;
+    }
+    let w = LAST_WINDOW.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+    s.set_view(WINDOW_KEY, &w);
+    w
+}
+
+fn existing_window(s: &Session<Workspace>) -> Option<u64> {
+    s.view::<u64>(WINDOW_KEY).filter(|w| *w > 0)
+}
+
+fn slot(window: u64, tab: TabId) -> Option<Arc<Mutex<Slot>>> {
+    registry().get(&(window, tab)).cloned()
 }
 
 fn lock(s: &Mutex<Slot>) -> MutexGuard<'_, Slot> {
     s.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Show `grid` in `tab` (replacing what was there: a new statement's cursor, a running state,
-/// an error).
-pub fn attach(tab: TabId, grid: GridState) {
-    let s = registry().entry(tab).or_default().clone();
+fn attach_in(window: u64, tab: TabId, grid: GridState) {
+    let s = registry().entry((window, tab)).or_default().clone();
     let mut s = lock(&s);
     s.grid = Some(grid);
     s.draw = DrawState::default();
 }
 
-/// Forget `tab`'s grid (the tab closed): its source and cursor are dropped.
-pub fn detach(tab: TabId) {
-    registry().remove(&tab);
-}
-
-/// Run `f` on `tab`'s grid.
-pub fn with_grid<T>(tab: TabId, f: impl FnOnce(&mut GridState, &mut DrawState) -> T) -> Option<T> {
-    let s = slot(tab)?;
+pub(crate) fn with_in<T>(window: u64, tab: TabId, f: impl FnOnce(&mut GridState, &mut DrawState) -> T) -> Option<T> {
+    let s = slot(window, tab)?;
     let mut s = lock(&s);
     let Slot { grid, draw } = &mut *s;
     grid.as_mut().map(|g| f(g, draw))
+}
+
+/// Show `grid` in `tab` (replacing what was there: a new statement's cursor, a running state).
+pub fn attach(s: &mut Session<Workspace>, tab: TabId, grid: GridState) {
+    attach_in(window(s), tab, grid);
+}
+
+/// Forget `tab`'s grid (the tab closed, or its run failed): its source and cursor are dropped.
+pub fn detach(s: &mut Session<Workspace>, tab: TabId) {
+    let w = window(s);
+    registry().remove(&(w, tab));
+}
+
+/// Forget every grid of this session (a scene starts from a fresh document, whose tab ids start
+/// again at 1).
+pub fn clear(s: &mut Session<Workspace>) {
+    let w = window(s);
+    registry().retain(|(win, _), _| *win != w);
+}
+
+/// Run `f` on `tab`'s grid.
+pub fn with_grid<T>(s: &Session<Workspace>, tab: TabId, f: impl FnOnce(&mut GridState, &mut DrawState) -> T) -> Option<T> {
+    with_in(existing_window(s)?, tab, f)
+}
+
+/// For tests and benches that drive one window through a `Driver` (no session at hand): the
+/// grid of `tab` in the window that took a key last.
+#[doc(hidden)]
+pub mod last_window {
+    use super::*;
+
+    pub fn attach(tab: TabId, grid: GridState) {
+        attach_in(LAST_WINDOW.load(Ordering::Relaxed), tab, grid);
+    }
+
+    pub fn with_grid<T>(tab: TabId, f: impl FnOnce(&mut GridState, &mut DrawState) -> T) -> Option<T> {
+        with_in(LAST_WINDOW.load(Ordering::Relaxed), tab, f)
+    }
 }
 
 /// Fetch jobs on ashlar's job queue.
@@ -113,6 +167,7 @@ pub fn show(ui: &mut egui::Ui, state: &str) {
 /// Show the rows of a finished run in `tab`: `conn` holds the cursor `editor::start_run` opened
 /// for `sql`, and `first` is the page it fetched. Replaces the tab's grid (closing its cursor).
 pub fn open_rows(
+    s: &mut Session<Workspace>,
     tab: TabId,
     conn: source::SharedConnection,
     rows: (std::sync::Arc<[quarry_core::Column]>, quarry_core::Total, quarry_core::CursorId, quarry_core::Page),
@@ -122,7 +177,7 @@ pub fn open_rows(
     let (columns, total, cursor, first) = rows;
     let total = total.at_least(first.end_row());
     let src = source::CursorSource::new(conn, cursor, sql, Some(first));
-    attach(tab, GridState::open(columns, total, Box::new(src)).dialect(dialect));
+    attach(s, tab, GridState::open(columns, total, Box::new(src)).dialect(dialect));
 }
 
 /// Draw `tab`'s grid (`state`: the shell's run state, `running` / `error` / `results` / ``),
@@ -130,10 +185,13 @@ pub fn open_rows(
 pub fn show_tab(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>, tab: TabId, state: &str) {
     // a new run is on its way: the old rows are stale
     if state == "running" {
+        let rect = ui.available_rect_before_wrap();
+        automation::register_fmt(ui, rect, format_args!("{ID}"), "Results", Role::Group, true, automation::Details::default());
         draw::skeleton(ui, ID, &GridState::running());
         return;
     }
-    let Some(s) = slot(tab).filter(|_| state != "error") else {
+    let w = window(cx.session_mut());
+    let Some(s) = slot(w, tab).filter(|_| state != "error") else {
         show(ui, state);
         return;
     };

@@ -18,6 +18,6 @@ scroll id=quarry.grid.table down 30000
 wait 500
 wait --text "≥ 3,000 rows"
 # sort by a column (a 10M-row result re-queries) and start again at the top
-click id=quarry.grid.table.header.4
+click id=quarry.grid.table.header.3
 wait --text "sorted by total_cents asc"
 assert exists id=quarry.grid.table.row.0

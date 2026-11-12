@@ -155,21 +155,31 @@ fn editor(s: &mut Session<Workspace>, sql: &str) -> TabId {
 /// The grid for the shared scene `results` (its editor tab and run state are the shell's), or the
 /// grid's own scene: tabs, grid and document. `query-running` / `query-error` are the shell's.
 pub fn setup(name: &str, s: &mut Session<Workspace>) {
+    super::clear(s);
     let active = s.doc().active;
     match (name, active) {
         ("results", Some(t)) => {
-            attach(t, orders(10_000_000));
+            // the scene's statement: SELECT id, customer_id, total_cents, status FROM orders ORDER BY id
+            let pick = [0usize, 1, 3, 2];
+            let all = orders_columns();
+            let columns: Arc<[Column]> = pick.iter().filter_map(|&c| all.get(c).cloned()).collect::<Vec<_>>().into();
+            let row = move |i: u64| {
+                let r = order(i);
+                pick.iter().map(|&c| r.get(c).cloned().unwrap_or(Value::Null)).collect()
+            };
+            let src = MemSource::generated(10_000_000, Arc::new(row)).streaming(true);
+            attach(s, t, GridState::open(columns, Total::AtLeast(0), Box::new(src)).dialect(EngineKind::Sqlite));
         }
         ("grid-loading", _) => {
             let t = editor(s, "SELECT * FROM orders");
             let mut g = orders(10_000_000);
             g.status = Status::Running;
-            attach(t, g);
+            attach(s, t, g);
         }
         ("grid-values", _) => {
             let t = editor(s, "SELECT * FROM events_sample");
-            attach(t, values());
-            with_grid(t, |g, _| {
+            attach(s, t, values());
+            with_grid(s, t, |g, _| {
                 g.layout.frozen = true;
                 g.selection.select_only(2);
                 g.cells.span = Some((2, 2));
@@ -179,7 +189,7 @@ pub fn setup(name: &str, s: &mut Session<Workspace>) {
         ("grid-edits", _) => {
             let table = TableRef::new(None, "orders");
             let t = tab(s, "orders", TabKind::Table { table: table.clone(), filter: None });
-            attach(t, orders(1_000_000).editable(EditTarget { table: table.clone(), key: vec![0] }));
+            attach(s, t, orders(1_000_000).editable(EditTarget { table: table.clone(), key: vec![0] }));
             let mut e = PendingEdits::new(t, table, vec!["id".into()]);
             let row = |i: u64| order(i);
             let o2 = row(2);
@@ -194,7 +204,7 @@ pub fn setup(name: &str, s: &mut Session<Workspace>) {
                 ("total_cents".into(), Value::Int(1_999)),
             ]);
             s.edit("Scene", |w| w.edits.push(e));
-            with_grid(t, |_, d| d.review = true);
+            with_grid(s, t, |_, d| d.review = true);
         }
         ("grid-wide", _) => {
             let t = editor(
@@ -229,7 +239,7 @@ pub fn setup(name: &str, s: &mut Session<Workspace>) {
             g.selection.select_only(1);
             g.selection.extend_to(4);
             g.cells.span = Some((4, 5));
-            attach(t, g);
+            attach(s, t, g);
         }
         _ => {}
     }

@@ -14,6 +14,8 @@ the lead.
 | claude | shell | wt/shell | `crates/app/src/{main.rs,view.rs,theme.rs,sidebar,editor,dialogs}/**` | review / merge | theme + fonts, sidebar schema tree, SQL editor (human-only run), history, connection dialog (keychain, agent access), table picker, every scene with pixel + accessibility goldens, `.ui` script test against the SQLite engine |
 | | grid | wt/grid | `crates/app/src/grid/**` | | |
 | claude | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | review / merge | 15 agent tools over MCP (guarded reads, redaction, row/size caps, rate limit, pause), `db.propose_write` → pending + counted estimate + preview, approval card (human-only approve/deny, ⌘⌥↵), approved write in a job via `execute_in_tx` with rollback outside the estimate, audit log + undo SQL, expiry, activity list with jump-to, egui charts (bar/line/area/scatter/histogram) + pivots; MCP, injected-input, Driver approve/deny/rollback and expiry tests |
+| claude | grid | wt/grid | `crates/app/src/grid/**` | review / merge | streaming grid on VirtualTable (page cache, cancel, 500k-row windows), sort (re-query / client), columns hide/reorder/freeze, cell popover, multi-cell copy TSV/CSV/JSON/INSERT, pending edits + DiffView/SQL, wired to the shell's runs; scenes, goldens, `.ui` script, scroll bench |
+| | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | | |
 | | bench | wt/bench | `bench/**`, `xtask/**` | | |
 
 Shared files (additive edits only, say so in the log): `crates/core/**`, `crates/app/src/ids.rs`,
@@ -77,3 +79,16 @@ Newest last. One line per event: date, stream, what changed, who must know.
   connection in `services().connections()` when the person connects (one block in `connect`), and
   ⌘↵ no longer swallows ⌘⌥↵ (Approve; `matches_logically` ignored Alt). **lead**: approved writes
   open their own human connection (not `sidebar::connections::Human`); worth sharing one.
+- 2026-11-12 · grid · QRY-GRID.1 on `wt/grid` (rebased on shell + agent). Additive contract
+  changes: core `edits` module (`PendingEdits`, `RowChange`) and `Workspace.edits`
+  (`#[serde(default)]`, `Workspace::edits(tab)`); handlers for `grid.sort`, `grid.copy`,
+  `edit.cell/add_row/delete_rows/discard/review` (ids.rs, ids/params unchanged; `grid.copy`
+  returns counts only, never cell text); scenes `grid-loading`, `grid-values`, `grid-edits`,
+  `grid-wide`; deps `ashlar-diff` (not re-exported by ashlar-rs) and dev `ashlar-debug`.
+  **shell**: view.rs now calls `grid::show_tab(ui, cx, tab, &state)` and, when a run's outcome
+  lands, `grid::open_rows(session, tab, human, rows, sql, dialect)` (the grid streams the rest of
+  the cursor in jobs and closes it) or `grid::detach`; re-blessed `results`, `query-running`,
+  `query-error` goldens (real rows / skeleton). **edit.commit** (human-only, not done here):
+  run `grid::edits::statements(doc.edits(tab), engine)` via `execute_in_tx`, then drop the set.
+  Table tabs become editable with `GridState::editable(EditTarget { table, key })` (primary key
+  from the schema) when the shell opens them.

@@ -110,6 +110,9 @@ with the same ids (additive).
 - `PlanNode` (EXPLAIN tree), `AuditEntry { at, actor, kind, connection, proposal?, sql,
   rows_affected?, undo_sql?, note? }` (one JSONL line), `Refusal { code, message }` displayed as
   `"<code>: <message>"`.
+- `PendingEdits { tab, table, key, changes: [RowChange::{Update{key, column, old, new} |
+  Insert{values} | Delete{key, before}}] }` (grid, additive): a table tab's uncommitted edits, in
+  `Workspace.edits`, so each edit is an undo step; `edit.commit` turns them into statements.
 - `Workspace` (the ashlar document): tabs (`Editor { sql }` | `Table { table, filter }`), active
   tab, chart panels (`ChartSpec`; additive: `ChartKind::Pivot` and `ChartSpec.agg` for `viz.pivot`,
   whose rows/columns/value columns are `x`/`series`/`y`; panel rows live in `quarry_viz::store`). Proposals are **not** in the document (undo must never touch a decision);

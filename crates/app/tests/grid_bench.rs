@@ -96,7 +96,7 @@ fn run(name: &str, g: GridState) -> (Stats, (usize, usize)) {
     d.pixels_per_point(2.0);
     d.scene("editor").unwrap();
     let tab = TabId(1);
-    grid::attach(tab, g);
+    grid::last_window::attach(tab, g);
     d.settle(120);
     // warm up, then mark where measuring starts
     let pointer = pos2(700.0, 560.0);
@@ -116,7 +116,7 @@ fn run(name: &str, g: GridState) -> (Stats, (usize, usize)) {
     }
     // jump far (random access) and back
     for target in [WINDOW_JUMP, 0] {
-        grid::with_grid(tab, |g, _| {
+        grid::last_window::with_grid(tab, |g, _| {
             g.set_window(target);
             g.scroll_to = Some(target % quarry::grid::model::WINDOW_ROWS + 10);
         });
@@ -124,7 +124,7 @@ fn run(name: &str, g: GridState) -> (Stats, (usize, usize)) {
             d.advance(DT);
         }
     }
-    let footprint = grid::with_grid(tab, |g, _| g.cache.footprint()).unwrap();
+    let footprint = grid::last_window::with_grid(tab, |g, _| g.cache.footprint()).unwrap();
     let stats = d.call("app.stats", json!({})).unwrap();
     let rss = stats["process"]["footprint_bytes"].as_u64();
     drop(d);
@@ -150,7 +150,6 @@ fn run(name: &str, g: GridState) -> (Stats, (usize, usize)) {
         footprint.1 / 1024,
         rss.map_or("n/a".into(), |b| format!("{:.0}", b as f64 / 1_048_576.0))
     );
-    grid::detach(tab);
     (s, footprint)
 }
 

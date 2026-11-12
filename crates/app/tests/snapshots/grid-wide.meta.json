@@ -1,7 +1,7 @@
 {
   "adapter": "Apple M5 Pro",
   "backend": "Metal",
-  "height": 601,
+  "height": 700,
   "scale": 1.0,
-  "width": 1133
+  "width": 1024
 }

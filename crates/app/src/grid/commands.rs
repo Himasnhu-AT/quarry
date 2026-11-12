@@ -18,38 +18,43 @@ fn fail(msg: impl Into<String>) -> CommandError {
     CommandError::failed("", msg.into())
 }
 
+fn no_grid() -> CommandError {
+    fail("no_grid: the tab shows no results")
+}
+
 fn active(s: &S) -> Result<TabId, CommandError> {
     s.doc().active.ok_or_else(|| fail("no_tab: no tab is open"))
 }
 
-fn on_grid<T>(tab: TabId, f: impl FnOnce(&mut GridState, &mut super::DrawState) -> T) -> Result<T, CommandError> {
-    with_grid(tab, f).ok_or_else(|| fail("no_grid: the tab shows no results"))
+fn on_grid<T>(s: &mut S, tab: TabId, f: impl FnOnce(&mut GridState, &mut super::DrawState) -> T) -> Result<T, CommandError> {
+    let w = super::window(s);
+    super::with_in(w, tab, f).ok_or_else(no_grid)
 }
 
 /// `grid.copy {format}`: copy the selected cells (whole rows when no cells are picked).
 pub fn copy(s: &mut S, p: &Value) -> R {
     let format = Format::parse(p.get("format").and_then(Value::as_str).unwrap_or("tsv")).unwrap_or(Format::Tsv);
     let tab = active(s)?;
-    let (rows, columns) = on_grid(tab, |g, _| g.copy(format))?;
+    let (rows, columns) = on_grid(s, tab, |g, _| g.copy(format))?;
     Ok(json!({"format": format.name(), "rows": rows, "columns": columns}))
 }
 
 /// `grid.sort {tab, column, descending}`: sort by a column (re-runs the statement unless the
 /// result is small and fully loaded). Applied on the next frame (it may start a job).
-pub fn sort(_s: &mut S, p: &Value) -> R {
+pub fn sort(s: &mut S, p: &Value) -> R {
     let tab = TabId(p.get("tab").and_then(Value::as_u64).unwrap_or(0));
     let name = p.get("column").and_then(Value::as_str).unwrap_or("");
     let descending = p.get("descending").and_then(Value::as_bool).unwrap_or(false);
     let col =
-        on_grid(tab, |g, _| g.columns.iter().position(|c| c.name == name))?.ok_or_else(|| fail(format!("unknown_column: no column `{name}`")))?;
-    on_grid(tab, |g, _| g.requested_sort = Some(Some(Order { column: col, descending })))?;
+        on_grid(s, tab, |g, _| g.columns.iter().position(|c| c.name == name))?.ok_or_else(|| fail(format!("unknown_column: no column `{name}`")))?;
+    on_grid(s, tab, |g, _| g.requested_sort = Some(Some(Order { column: col, descending })))?;
     Ok(json!({"tab": tab, "column": name, "descending": descending}))
 }
 
 /// `edit.cell` (F2): edit the cell at the cursor.
 pub fn edit_cell(s: &mut S, _: &Value) -> R {
     let tab = active(s)?;
-    on_grid(tab, |g, _| {
+    on_grid(s, tab, |g, _| {
         let row = g.selection.cursor().map(|r| g.window.saturating_add(r as u64));
         let shown = g.layout.shown();
         let col = g.cells.span.and_then(|(_, b)| shown.get(b).copied()).or_else(|| shown.first().copied());
@@ -66,17 +71,20 @@ pub fn edit_cell(s: &mut S, _: &Value) -> R {
 /// `edit.add_row`.
 pub fn add_row(s: &mut S, _: &Value) -> R {
     let tab = active(s)?;
-    on_grid(tab, |g, _| super::add_row(s, tab, g))?;
+    let w = super::window(s);
+    super::with_in(w, tab, |g, _| super::add_row(s, tab, g)).ok_or_else(no_grid)?;
     Ok(json!({"pending": s.doc().edits(tab).map_or(0, |e| e.changes.len())}))
 }
 
 /// `edit.delete_rows`: mark the selected rows for deletion.
 pub fn delete_rows(s: &mut S, _: &Value) -> R {
     let tab = active(s)?;
-    on_grid(tab, |g, _| {
+    let w = super::window(s);
+    super::with_in(w, tab, |g, _| {
         let rows: Vec<u64> = g.selection.iter().map(|r| r as u64).collect();
         super::delete_rows(s, tab, g, &rows);
-    })?;
+    })
+    .ok_or_else(no_grid)?;
     Ok(json!({"pending": s.doc().edits(tab).map_or(0, |e| e.changes.len())}))
 }
 
@@ -84,7 +92,7 @@ pub fn delete_rows(s: &mut S, _: &Value) -> R {
 pub fn discard(s: &mut S, _: &Value) -> R {
     let tab = active(s)?;
     super::discard(s, tab);
-    let _ = with_grid(tab, |_, d| d.review = false);
+    let _ = with_grid(s, tab, |_, d| d.review = false);
     Ok(json!({"pending": 0}))
 }
 
@@ -92,6 +100,6 @@ pub fn discard(s: &mut S, _: &Value) -> R {
 pub fn review(s: &mut S, _: &Value) -> R {
     let tab = active(s)?;
     let n = s.doc().edits(tab).map_or(0, |e| e.changes.len());
-    on_grid(tab, |_, d| d.review = n > 0)?;
+    on_grid(s, tab, |_, d| d.review = n > 0)?;
     Ok(json!({"pending": n, "open": n > 0}))
 }

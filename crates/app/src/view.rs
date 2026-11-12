@@ -406,9 +406,9 @@ impl Shell {
                     let r = (rows.columns.clone(), rows.total, rows.cursor, rows.first.clone());
                     // the rows are the last statement's (a re-sort re-runs that one)
                     let last = outcome.sql.rsplit(";\n").next().unwrap_or(&outcome.sql);
-                    grid::open_rows(tab, human, r, last, dialect);
+                    grid::open_rows(cx.session_mut(), tab, human, r, last, dialect);
                 }
-                _ => grid::detach(tab),
+                _ => grid::detach(cx.session_mut(), tab),
             }
             self.tabs.entry(tab).or_default().run = Some(RunState::Done(outcome));
             if cx.doc().active == Some(tab) {
