@@ -15,9 +15,13 @@ No single layer is trusted. Each one below would stop a write on its own.
   `SELECT` (and `USAGE` on schemas). With that role the database itself refuses writes, whatever the
   layers above miss.
 - **SQLite:** opened with `SQLITE_OPEN_READ_ONLY`, `PRAGMA query_only = 1`, and an authorizer
-  callback that denies every action code except `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_FUNCTION`
-  (allow-listed functions) and `SQLITE_PRAGMA` (allow-listed read pragmas). `ATTACH` and
-  `load_extension` are denied (`SQLITE_ATTACH`, extension loading disabled).
+  callback that denies every write, transaction, `ATTACH`/`DETACH` and write-pragma action code, and
+  denies the dangerous built-in functions by name (`load_extension`, `fts3_tokenizer`, `readfile`,
+  `writefile`, `edit`, `lsdir`); other functions pass this layer. The function **allow-list** is
+  layer B's (below), so a function must pass both. Extension loading is disabled.
+- **PostgreSQL, transaction check:** every agent statement runs inside `BEGIN READ ONLY … ROLLBACK`,
+  and after each statement the engine checks that this transaction is still open, so an agent that
+  sends `COMMIT` or `ROLLBACK` to escape it is caught and the session is dropped.
 
 ## Layer B: the SQL classifier (`crates/guard`)
 Fail closed: a statement is a read only when every part of it is provably a read. API:
