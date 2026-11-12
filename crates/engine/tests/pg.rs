@@ -290,14 +290,21 @@ fn every_write_through_the_agent_connection_fails_at_the_server() {
         let r = q(&mut a, sql);
         assert!(r.is_err(), "{sql} ran on the agent connection: {r:?}");
     }
-    // session tampering is undone: the read-only transaction rolls back
-    let _ = q(&mut a, "SET default_transaction_read_only = off");
-    let _ = q(&mut a, "SELECT set_config('default_transaction_read_only', 'off', false)");
+    // session tampering is undone: the read-only transaction rolls back once its results close
+    let run = |a: &mut Box<dyn AgentConnection>, sql: &str| {
+        if let Ok(c) = q(a, sql) {
+            a.close(c.id);
+        }
+    };
+    run(&mut a, "SET default_transaction_read_only = off");
+    let c = q(&mut a, "SELECT set_config('default_transaction_read_only', 'off', false)").unwrap();
+    // while that transaction is open the setting reads `off`, but the transaction is read-only
     assert!(q(&mut a, &format!("INSERT INTO {s}.owners VALUES (5, 'x')")).is_err());
+    a.close(c.id);
     // ending the transaction is caught, and the next statement is read-only again
     let r = q(&mut a, "COMMIT");
     assert!(r.is_err(), "{r:?}");
-    let _ = q(&mut a, "SET default_transaction_read_only = off");
+    run(&mut a, "SET default_transaction_read_only = off");
     assert!(q(&mut a, &format!("INSERT INTO {s}.owners VALUES (6, 'x')")).is_err());
     let c = q(&mut a, "SHOW default_transaction_read_only").unwrap();
     assert_eq!(a.fetch(c.id, 0, 1).unwrap().rows[0][0], Value::text("on"));
