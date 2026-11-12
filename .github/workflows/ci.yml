@@ -48,7 +48,8 @@ jobs:
       - run: cargo xtask ci
 
   postgres:
-    # The engine's PostgreSQL suite (crates/engine/tests/pg.rs) against a throwaway server.
+    # The PostgreSQL suites against a throwaway server: the engine's (crates/engine/tests/pg.rs)
+    # and the app-level agent path (crates/app/tests/agent_pg.rs: db.query, propose, approve).
     name: postgres engine
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -72,5 +73,12 @@ jobs:
           persist-credentials: false
       - name: Install toolchain
         run: rustup toolchain install
+      - name: Install Linux system libraries
+        # the app crate (agent_pg) links the window toolkit
+        timeout-minutes: 10
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends libgtk-3-dev libxdo-dev libxkbcommon-dev libdbus-1-dev
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo test -p quarry-engine --test pg -- --nocapture
+      - run: cargo test -p quarry --test agent_pg -- --nocapture
