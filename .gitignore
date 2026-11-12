@@ -1,0 +1,4 @@
+/target
+.claude/worktrees/
+*.sqlite-journal
+.DS_Store
