@@ -500,7 +500,7 @@ impl Shell {
                 let tab = doc.active.and_then(|id| doc.tab(id));
                 let editor_tab = tab.is_some_and(|t| matches!(t.kind, TabKind::Editor { .. }));
                 let running = tab.and_then(|t| self.tabs.get(&t.id)).is_some_and(|s| matches!(s.run, Some(RunState::Running { .. })));
-                let mac = cfg!(target_os = "macos");
+                let mac = theme::platform(!self.screen.is_empty()) == ashlar::command::shortcut::Platform::Mac;
                 let run = ui
                     .add_enabled(
                         editor_tab,

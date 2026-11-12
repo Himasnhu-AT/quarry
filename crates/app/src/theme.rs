@@ -3,6 +3,7 @@
 //! JetBrains Mono 12 px for SQL and cells). Dark first: the light set is ashlar's own with
 //! Quarry's accent and type scale.
 
+use ashlar::command::shortcut::Platform;
 use ashlar::egui::{self, Color32, FontFamily};
 use ashlar::ui::fonts::FontInstall;
 use ashlar::ui::tokens::{self, Tokens};
@@ -144,6 +145,12 @@ pub fn strong(text: impl Into<String>, size: f32) -> egui::RichText {
     egui::RichText::new(text).family(strong_family()).size(size)
 }
 
+/// The platform whose key names the window shows. Scenes pin macOS (as ashlar's gallery does),
+/// so their accessibility and pixel goldens read the same on every OS.
+pub fn platform(scene: bool) -> Platform {
+    if scene { Platform::Mac } else { Platform::current() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +164,12 @@ mod tests {
             assert!(contrast_ratio(fg, bg) >= 4.5, "{fg:?} on {bg:?}: {}", contrast_ratio(fg, bg));
         }
         assert!(t.dark && !light().dark);
+    }
+
+    #[test]
+    fn scenes_show_mac_key_names_on_every_os() {
+        assert_eq!(platform(true), Platform::Mac);
+        assert_eq!(platform(false), Platform::current());
     }
 
     #[test]

@@ -28,8 +28,12 @@ const ACTIVITY_ROWS: usize = 100;
 /// View-state key `proposal.focus` sets: focus the newest pending card's Deny button.
 pub const FOCUS_KEY: &str = "proposal_focus";
 
-fn shortcut_label() -> &'static str {
-    if cfg!(target_os = "macos") { "Cmd+Option+Enter" } else { "Ctrl+Alt+Enter" }
+/// Approve's keys as the person reads them (a scene pins macOS: `theme::platform`).
+fn shortcut_label(scene: bool) -> &'static str {
+    match theme::platform(scene) {
+        ashlar::command::shortcut::Platform::Mac => "Cmd+Option+Enter",
+        ashlar::command::shortcut::Platform::Other => "Ctrl+Alt+Enter",
+    }
 }
 
 /// What the panel draws: the live proposals and activity, or a scene's fixed demo.
@@ -227,7 +231,7 @@ fn pending_card(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>, m: &Model, p: &Pr
                     approve_and_run(cx, t, p.id);
                 }
             });
-            ui.label(RichText::new(format!("Deny is the default · {} approves", shortcut_label())).color(theme::MUTED).small());
+            ui.label(RichText::new(format!("Deny is the default · {} approves", shortcut_label(m.demo))).color(theme::MUTED).small());
         });
     register(ui, &r.response, p.id, "", alias, "Agent wants to change data", Role::Alert);
     if scroll {
