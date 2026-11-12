@@ -23,6 +23,9 @@ pub const SCENES: &[&str] = &[
     "approval-denied",
     "approval-expired",
     "chart",
+    "history",
+    "open-table",
+    "sidebar-menu",
 ];
 
 fn editor_tab(s: &mut S, sql: &str) -> TabId {
@@ -36,7 +39,13 @@ fn editor_tab(s: &mut S, sql: &str) -> TabId {
 }
 
 /// Set up scene `name` on a fresh session.
+///
+/// Shell view keys (read once when the scene starts): `scene.connections` (`connected`,
+/// `connecting`, `failed`: the demo connections of `crate::sidebar::scene_connections`),
+/// `scene.expand` (tree keys to open), `scene.select`, `scene.menu` (a tree key whose context
+/// menu is open), `scene.dialog` (`history`, `open_table`).
 pub fn setup(name: &str, s: &mut S) {
+    shell(name, s);
     s.set_view("screen", &name);
     let q = "SELECT id, customer_id, total_cents, status FROM orders ORDER BY id";
     match name {
@@ -82,6 +91,41 @@ pub fn setup(name: &str, s: &mut S) {
             });
         }
         // "empty", "connecting", "disconnected": the screen marker only, for now
+        _ => {}
+    }
+}
+
+/// The shell's part of a scene: demo connections, the open tree nodes and dialogs.
+fn shell(name: &str, s: &mut S) {
+    // a scene applied to a running window starts from a clean view state
+    for key in ["scene.connections", "scene.select", "scene.menu", "scene.dialog", "proposal"] {
+        s.set_view_value(key, Value::Null);
+    }
+    s.set_view("scene.expand", &Vec::<String>::new());
+    s.set_view("query_state", &"");
+    s.set_view("dialog", &"");
+    s.set_view("agent_state", &"");
+    s.set_view("agent_panel", &false);
+    let status = match name {
+        "empty" => return,
+        "connecting" => "connecting",
+        "disconnected" => "failed",
+        _ => "connected",
+    };
+    s.set_view("scene.connections", &status);
+    let mut expand = vec!["conn.fixture"];
+    if matches!(name, "editor" | "query-running" | "results" | "query-error" | "sidebar-menu") {
+        expand.push("table.fixture.main.orders");
+    }
+    s.set_view("scene.expand", &expand);
+    match name {
+        "editor" | "query-running" | "results" | "query-error" => s.set_view("scene.select", &"table.fixture.main.orders"),
+        "sidebar-menu" => s.set_view("scene.menu", &"table.fixture.main.orders"),
+        "history" => {
+            editor_tab(s, "SELECT status, count(*) FROM orders GROUP BY status;");
+            s.set_view("scene.dialog", &"history");
+        }
+        "open-table" => s.set_view("scene.dialog", &"open_table"),
         _ => {}
     }
 }

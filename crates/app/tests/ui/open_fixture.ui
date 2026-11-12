@@ -1,0 +1,15 @@
+# Open the fixture SQLite connection, expand a table, type a SELECT. Running it is the person's
+# own key press (crates/app/tests/shell.rs pushes it): an injected Mod+Enter runs nothing.
+assert exists id=quarry.tree.conn.fixture
+exec conn.open '{"connection": "fixture"}'
+# --- connected
+click text=orders
+press Right
+wait --text "total_cents"
+assert exists id=quarry.tree.column.fixture
+exec tab.new_editor '{"connection": "fixture"}'
+fill id=quarry.editor "SELECT id, status FROM orders ORDER BY id LIMIT 5"
+assert exists id=quarry.toolbar.run
+# --- typed
+press Mod+Enter
+sleep 200

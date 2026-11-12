@@ -47,6 +47,13 @@ impl HumanTicket {
         ctx.input_mut(|i| i.consume_shortcut(shortcut)).then_some(Self { _private: () })
     }
 
+    /// A ticket when the person activated button `button` of an `ashlar::ui::dialog::Dialog`
+    /// this frame (click, or Enter on the default button): the dialog reports an outcome, not a
+    /// response. None while an agent drives.
+    pub fn from_dialog(ctx: &egui::Context, outcome: Option<ashlar::ui::dialog::DialogOutcome>, button: usize) -> Option<Self> {
+        (outcome == Some(ashlar::ui::dialog::DialogOutcome::Button(button)) && !agent_driving(ctx)).then_some(Self { _private: () })
+    }
+
     #[cfg(test)]
     pub(crate) fn for_tests() -> Self {
         Self { _private: () }

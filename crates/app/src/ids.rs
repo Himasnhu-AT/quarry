@@ -17,7 +17,8 @@
 //!   minted from a real click or key press. See `docs/contracts.md`, "Human-only actions".
 //!
 //! Handlers are M0 stubs failing with `not_yet: not yet` unless noted; streams replace them
-//! without changing ids or params.
+//! without changing ids or params. The shell's (`conn.*`, `tab.*`, `table.open`, `query.cancel`,
+//! `query.format`, `history.show`) live in `crate::sidebar::commands` and `crate::editor::commands`.
 
 use ashlar::prelude::*;
 use quarry_core::limits::{AGENT_ROW_CAP_MAX, AGENT_TIMEOUT_MS_MAX, SAMPLE_MAX};
@@ -343,11 +344,11 @@ pub fn commands() -> Vec<CommandSpec<S>> {
         cmd!("viz.close", "Close a Chart", [], None, [PANEL], always, not_yet),
         // ---- human commands
         CommandSpec::new("palette.open", "Command Palette", palette_open).shortcut("Mod+K").query(),
-        cmd!("conn.new", "New Connection…", ["Connection"], None, [], always, not_yet),
-        cmd!("conn.edit", "Edit Connection…", ["Connection"], None, [CONNECTION], always, not_yet),
-        cmd!("conn.open", "Connect", ["Connection"], None, [CONNECTION], always, not_yet),
-        cmd!("conn.close", "Disconnect", ["Connection"], None, [CONNECTION], always, not_yet),
-        cmd!("conn.test", "Test Connection", [], None, [CONNECTION], always, not_yet),
+        cmd!("conn.new", "New Connection…", ["Connection"], None, [], always, crate::sidebar::commands::conn_new),
+        cmd!("conn.edit", "Edit Connection…", ["Connection"], None, [CONNECTION], always, crate::sidebar::commands::conn_edit),
+        cmd!("conn.open", "Connect", ["Connection"], None, [CONNECTION], always, crate::sidebar::commands::conn_open),
+        cmd!("conn.close", "Disconnect", ["Connection"], None, [CONNECTION], always, crate::sidebar::commands::conn_close),
+        cmd!("conn.test", "Test Connection", [], None, [CONNECTION], always, crate::sidebar::commands::conn_test),
         cmd!(
             "tab.new_editor",
             "New Editor Tab",
@@ -357,13 +358,21 @@ pub fn commands() -> Vec<CommandSpec<S>> {
             always,
             tab_new_editor
         ),
-        cmd!("tab.close", "Close Tab", [], None, [TAB], always, not_yet),
-        query!("tab.select", "Select Tab", [TAB], not_yet),
-        cmd!("table.open", "Open Table…", ["Query"], Some("Mod+P"), [Param::string("connection"), Param::string("table")], always, not_yet),
-        query!("query.cancel", "Cancel Query", [Param::int_in("tab", 1, i64::MAX)], not_yet).shortcut("Mod+."),
+        cmd!("tab.close", "Close Tab", [], None, [TAB], always, crate::editor::commands::tab_close),
+        query!("tab.select", "Select Tab", [TAB], crate::editor::commands::tab_select),
+        cmd!(
+            "table.open",
+            "Open Table…",
+            ["Query"],
+            Some("Mod+P"),
+            [Param::string("connection"), Param::string("table")],
+            always,
+            crate::sidebar::commands::table_open
+        ),
+        query!("query.cancel", "Cancel Query", [Param::int_in("tab", 1, i64::MAX)], crate::editor::commands::query_cancel).shortcut("Mod+."),
         query!("query.explain", "Explain", [Param::int_in("tab", 1, i64::MAX)], not_yet).shortcut("Mod+E"),
-        cmd!("query.format", "Format SQL", ["Query"], None, [Param::int_in("tab", 1, i64::MAX)], always, not_yet),
-        query!("history.show", "Query History", [Param::string("search")], not_yet),
+        cmd!("query.format", "Format SQL", ["Query"], None, [Param::int_in("tab", 1, i64::MAX)], always, crate::editor::commands::query_format),
+        query!("history.show", "Query History", [Param::string("search")], crate::editor::commands::history_show),
         query!("grid.filter", "Filter Grid", [], not_yet).shortcut("Mod+F"),
         query!("grid.sort", "Sort Grid", [TAB, Param::string("column").required(), Param::bool("descending")], not_yet),
         query!("grid.copy", "Copy Rows", [Param::one_of("format", &["tsv", "csv", "json", "insert"]).about("default tsv")], not_yet),

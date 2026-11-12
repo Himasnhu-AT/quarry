@@ -38,6 +38,7 @@ pub fn app() -> App<Workspace> {
         .format(format())
         .file_extension("quarry")
         .window_size(1280.0, 800.0)
+        .setup(theme::install)
         .commands(ids::commands())
         .instructions(INSTRUCTIONS)
         .view(view::view());

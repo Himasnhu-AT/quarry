@@ -31,6 +31,10 @@ ashlar = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
+# the OS keychain for connection passwords (`ashlar-rs` does not enable `secrets`)
+ashlar-native = { version = "0.2", default-features = false, features = ["secrets"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# a small fixture database for the shell's `.ui` script test
+rusqlite = { workspace = true }
