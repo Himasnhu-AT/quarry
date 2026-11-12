@@ -14,6 +14,13 @@ No single layer is trusted. Each one below would stop a write on its own.
   set. Strongly recommended (the connection dialog offers it): a dedicated **agent role** with only
   `SELECT` (and `USAGE` on schemas). With that role the database itself refuses writes, whatever the
   layers above miss.
+- **PostgreSQL, keyword gate:** a read-only transaction does not refuse everything that is not a
+  read: PostgreSQL accepts `LOCK` (any mode), `REINDEX`, `CLUSTER`, `NOTIFY`, `LISTEN`, `DO`,
+  `PREPARE` and `SET` inside one. So the agent session sends the server only statements whose
+  first keyword (after comments and parentheses) is `SELECT`, `WITH`, `VALUES`, `TABLE`, `SHOW`, or
+  `EXPLAIN` of one of the first four; anything else fails in the engine. Session-level advisory
+  locks (`SELECT pg_advisory_lock(…)`, allowed in a read-only transaction and kept after it) are
+  dropped with `pg_advisory_unlock_all()` whenever an agent transaction ends.
 - **SQLite:** opened with `SQLITE_OPEN_READ_ONLY`, `PRAGMA query_only = 1`, and an authorizer
   callback that denies every write, transaction, `ATTACH`/`DETACH` and write-pragma action code, and
   denies the dangerous built-in functions by name (`load_extension`, `fts3_tokenizer`, `readfile`,

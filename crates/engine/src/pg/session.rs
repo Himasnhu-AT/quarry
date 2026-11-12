@@ -105,8 +105,8 @@ async fn timed<T>(canceller: &Canceller, ms: Option<u32>, fut: impl Future<Outpu
     }
 }
 
-/// Whether a statement can be the query of a `DECLARE CURSOR` (skips comments and parentheses).
-pub(crate) fn select_like(sql: &str) -> bool {
+/// The first keyword of a statement, lower-cased (skips comments and parentheses).
+fn first_word(sql: &str) -> String {
     let mut s = sql;
     loop {
         s = s.trim_start_matches(|c: char| c.is_whitespace() || c == '(');
@@ -118,9 +118,34 @@ pub(crate) fn select_like(sql: &str) -> bool {
             break;
         }
     }
-    let word: String = s.chars().take_while(char::is_ascii_alphabetic).collect::<String>().to_ascii_lowercase();
-    matches!(word.as_str(), "select" | "with" | "values" | "table")
+    s.chars().take_while(char::is_ascii_alphabetic).collect::<String>().to_ascii_lowercase()
 }
+
+/// Whether a statement can be the query of a `DECLARE CURSOR` (skips comments and parentheses).
+pub(crate) fn select_like(sql: &str) -> bool {
+    matches!(first_word(sql).as_str(), "select" | "with" | "values" | "table")
+}
+
+/// Agent (layer A, defense in depth): only statements that start like a read reach the server:
+/// `SELECT`, `WITH`, `VALUES`, `TABLE`, `SHOW`, and `EXPLAIN` of one of the first four.
+/// PostgreSQL accepts some non-reads inside a read-only transaction (`LOCK`, `REINDEX`,
+/// `CLUSTER`, `NOTIFY`, `LISTEN`, `DO`, `PREPARE`, `SET`…); the classifier refuses them (layer B),
+/// and so does this gate, before the server sees them.
+pub(crate) fn agent_may_run(sql: &str) -> bool {
+    match first_word(sql).as_str() {
+        "select" | "with" | "values" | "table" | "show" => true,
+        "explain" => select_like(crate::strip_explain(sql.trim_start())),
+        _ => false,
+    }
+}
+
+fn not_a_read() -> EngineError {
+    EngineError::Database { message: "the agent connection runs only SELECT, WITH, VALUES, TABLE, SHOW and EXPLAIN".into(), position: None }
+}
+
+/// How an agent transaction ends: roll back, and drop session-level advisory locks a function
+/// call took inside it (`pg_advisory_lock` is allowed in a read-only transaction and outlives it).
+const AGENT_END: &str = "ROLLBACK; SELECT pg_advisory_unlock_all()";
 
 enum Source {
     Declared { name: String, pos: u64, fetch: Option<(u64, Statement)> },
@@ -204,7 +229,7 @@ impl Session {
             return;
         }
         self.in_tx = false;
-        let end = if self.agent { "ROLLBACK" } else { "COMMIT" };
+        let end = if self.agent { AGENT_END } else { "COMMIT" };
         if let Err(e) = self.client.batch_execute(end).await {
             log::warn!("{end} of the cursor transaction failed: {e}");
             if self.client.batch_execute("ROLLBACK").await.is_err() {
@@ -218,7 +243,8 @@ impl Session {
         self.drop_declared();
         if self.in_tx {
             self.in_tx = false;
-            if self.client.batch_execute("ROLLBACK").await.is_err() {
+            let end = if self.agent { AGENT_END } else { "ROLLBACK" };
+            if self.client.batch_execute(end).await.is_err() {
                 self.broken = true;
             }
         }
@@ -248,7 +274,7 @@ impl Session {
         // the statement ended our transaction: reset and set the guards again
         self.drop_declared();
         self.in_tx = false;
-        let _ = self.client.batch_execute("ROLLBACK").await;
+        let _ = self.client.batch_execute(AGENT_END).await;
         if self.client.batch_execute(AGENT_GUARDS).await.is_err() {
             self.broken = true;
         }
@@ -337,6 +363,9 @@ impl Session {
     /// Run one statement and open a cursor on its rows.
     pub(crate) async fn query(&mut self, sql: &str, opts: QueryOptions) -> Result<Cursor, EngineError> {
         self.check()?;
+        if self.agent && !agent_may_run(sql) {
+            return Err(not_a_read());
+        }
         if self.cursors.len() >= MAX_CURSORS {
             return Err(EngineError::Database { message: format!("{MAX_CURSORS} results are open: close some"), position: None });
         }
@@ -459,6 +488,9 @@ impl Session {
     /// `EXPLAIN (FORMAT JSON)`, always rolled back (an analyzed write never commits).
     pub(crate) async fn explain(&mut self, sql: &str, analyze: bool, timeout: Option<u32>) -> Result<PlanNode, EngineError> {
         self.check()?;
+        if self.agent && !select_like(sql) {
+            return Err(not_a_read());
+        }
         let text = format!("EXPLAIN ({}FORMAT JSON) {sql}", if analyze { "ANALYZE, " } else { "" });
         let nested = self.in_tx;
         if nested {
@@ -467,7 +499,11 @@ impl Session {
             self.sql(if self.agent { "BEGIN READ ONLY" } else { "BEGIN" }).await?;
         }
         let r = timed(&self.canceller, timeout, self.client.query(&text, &[])).await;
-        let undo = if nested { "ROLLBACK TO SAVEPOINT quarry_step; RELEASE SAVEPOINT quarry_step" } else { "ROLLBACK" };
+        let undo = match (nested, self.agent) {
+            (true, _) => "ROLLBACK TO SAVEPOINT quarry_step; RELEASE SAVEPOINT quarry_step",
+            (false, true) => AGENT_END,
+            (false, false) => "ROLLBACK",
+        };
         if self.client.batch_execute(undo).await.is_err() {
             self.abandon().await;
         }
@@ -531,6 +567,53 @@ mod tests {
         }
         for s in ["SHOW search_path", "EXPLAIN SELECT 1", "INSERT INTO t VALUES (1) RETURNING *", "selectx", "", "-- only a comment"] {
             assert!(!select_like(s), "{s}");
+        }
+    }
+
+    #[test]
+    fn the_agent_gate_passes_reads_only() {
+        for s in [
+            "SELECT 1",
+            "/* x */ (WITH a AS (SELECT 1) SELECT * FROM a)",
+            "VALUES (1)",
+            "TABLE t",
+            "SHOW search_path",
+            "EXPLAIN SELECT 1",
+            "explain analyze select 1",
+            "EXPLAIN (FORMAT JSON) WITH a AS (SELECT 1) SELECT 1",
+        ] {
+            assert!(agent_may_run(s), "{s}");
+        }
+        for s in [
+            "LOCK TABLE t",
+            "lock t IN ACCESS SHARE MODE",
+            "REINDEX TABLE t",
+            "CLUSTER t",
+            "NOTIFY c",
+            "LISTEN c",
+            "UNLISTEN *",
+            "DO $$ BEGIN PERFORM 1; END $$",
+            "PREPARE p AS SELECT 1",
+            "EXECUTE p",
+            "DEALLOCATE p",
+            "DECLARE c CURSOR FOR SELECT 1",
+            "FETCH c",
+            "SET x = 1",
+            "RESET ALL",
+            "DISCARD ALL",
+            "COMMIT",
+            "BEGIN",
+            "SAVEPOINT s",
+            "CHECKPOINT",
+            "LOAD 'x'",
+            "VACUUM t",
+            "ANALYZE t",
+            "COPY t TO STDOUT",
+            "EXPLAIN ANALYZE DELETE FROM t",
+            "-- SELECT\nDELETE FROM t",
+            "",
+        ] {
+            assert!(!agent_may_run(s), "{s}");
         }
     }
 }

@@ -240,8 +240,12 @@ fn transactions_and_explain() {
     assert_eq!(d.count(&mut h, &format!("SELECT count(*) FROM {}", d.t("items"))), 2499, "EXPLAIN ANALYZE committed");
 }
 
-/// Layer A alone: writes sent down the agent path with the classifier switched off fail at the
-/// server, and the data is unchanged.
+/// Layer A alone: writes sent down the agent path with the classifier switched off fail, and the
+/// data is unchanged. Statements that start like a read (`SELECT`, `WITH`, …) reach the server,
+/// whose read-only transaction refuses the write inside them; every other statement is refused
+/// by the agent session's keyword gate before the server sees it, including the ones PostgreSQL
+/// itself accepts in a read-only transaction (`LOCK`, `REINDEX`, `CLUSTER`, `NOTIFY`, `LISTEN`,
+/// `DO`, `PREPARE`, `SET`).
 #[test]
 fn every_write_through_the_agent_connection_fails_at_the_server() {
     let Some(d) = db("agent") else { return };
@@ -271,6 +275,11 @@ fn every_write_through_the_agent_connection_fails_at_the_server() {
         format!("COMMENT ON TABLE {s}.items IS 'x'"),
         format!("VACUUM {s}.items"),
         format!("REINDEX TABLE {s}.items"),
+        format!("CLUSTER {s}.items"),
+        format!("LOCK TABLE {s}.items IN ACCESS SHARE MODE"),
+        "LISTEN quarry".into(),
+        "PREPARE p AS SELECT 1".into(),
+        "CHECKPOINT".into(),
         "SELECT nextval('pg_catalog.pg_class_oid_index')".into(),
         "DO $$ BEGIN PERFORM 1; END $$".into(),
         "NOTIFY quarry".into(),
@@ -292,6 +301,17 @@ fn every_write_through_the_agent_connection_fails_at_the_server() {
     assert!(q(&mut a, &format!("INSERT INTO {s}.owners VALUES (6, 'x')")).is_err());
     let c = q(&mut a, "SHOW default_transaction_read_only").unwrap();
     assert_eq!(a.fetch(c.id, 0, 1).unwrap().rows[0][0], Value::text("on"));
+    // a session-level advisory lock is allowed in a read-only transaction and would outlive it:
+    // the agent session drops them when its transaction ends
+    let c = q(&mut a, "SELECT pg_advisory_lock(424242)").unwrap();
+    a.close(c.id);
+    let mut h = d.human();
+    assert_eq!(
+        d.count(&mut h, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objid = 424242"),
+        0,
+        "advisory lock held after the agent statement"
+    );
+    drop(h);
     // EXPLAIN ANALYZE of a write fails too
     assert!(a.explain(&ReadStatement::unchecked(&format!("DELETE FROM {s}.items"), EngineKind::Postgres), true).is_err());
     drop(a);
