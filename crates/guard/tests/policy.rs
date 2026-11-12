@@ -55,6 +55,19 @@ fn proposal_drafts_carry_kind_tables_and_the_count_hook() {
 }
 
 #[test]
+fn updates_name_the_columns_they_assign() {
+    let p = Policy::default();
+    let a = |sql: &str, e| propose_write(sql, e, &p).unwrap().assigned;
+    assert_eq!(a("UPDATE orders SET status = 'x', \"Total\" = 1 WHERE id = 3", PG), Some(vec!["status".into(), "Total".into()]));
+    assert_eq!(a("UPDATE orders o SET o.id = id + 1 WHERE id = 3", LITE), Some(vec!["id".into()]));
+    assert_eq!(a("UPDATE t SET (a, b) = (1, 2)", PG), Some(vec!["a".into(), "b".into()]));
+    // wider than the SET list says, or not an UPDATE: unknown
+    assert_eq!(a("UPDATE OR REPLACE t SET id = 2 WHERE id = 1", LITE), None);
+    assert_eq!(a("UPDATE t SET v = s.v FROM s WHERE s.id = t.id", PG), None);
+    assert_eq!(a("DELETE FROM t WHERE id = 1", PG), None);
+}
+
+#[test]
 fn row_cap_goes_into_the_sql() {
     let cases = [
         ("SELECT * FROM t", 100, "SELECT * FROM t LIMIT 100"),

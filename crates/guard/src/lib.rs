@@ -160,6 +160,10 @@ pub struct WriteStatement {
     /// the same WHERE, classified as a read, for the engine to run on the agent connection.
     /// `None` when there is no such count (the engine falls back to the planner's EXPLAIN).
     pub count: Option<ReadStatement>,
+    /// For a single-table UPDATE, the columns its SET assigns (additive, finish stream): an undo
+    /// plan refuses one that changes a primary key. `None` for other statements and for an UPDATE
+    /// that may touch more than its SET says (`UPDATE OR REPLACE`, `UPDATE … FROM`).
+    pub assigned: Option<Vec<String>>,
 }
 
 impl WriteStatement {
@@ -311,7 +315,7 @@ fn write_statement(sql: &str, stmt: &Statement, root: Root, found: walk::Finding
         Verdict::Read(r) => Some(r),
         _ => None,
     });
-    WriteStatement { sql: sql.into(), engine, tables, kind, unbounded: statement::unbounded(stmt), count }
+    WriteStatement { sql: sql.into(), engine, tables, kind, unbounded: statement::unbounded(stmt), count, assigned: statement::assigned(stmt) }
 }
 
 /// The `db.propose_write` path: one statement as an approval-card draft. Refused only when it

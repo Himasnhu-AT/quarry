@@ -2,7 +2,7 @@
 //! something refused on every path.
 
 use quarry_core::{EngineKind, TableRef};
-use sqlparser::ast::{CopySource, FromTable, ObjectName, ObjectNamePart, Statement, TableFactor, TableObject, TableWithJoins};
+use sqlparser::ast::{AssignmentTarget, CopySource, FromTable, ObjectName, ObjectNamePart, Statement, TableFactor, TableObject, TableWithJoins};
 
 use crate::functions::{self, PragmaArg};
 use crate::{ReadKind, WriteKind};
@@ -188,6 +188,33 @@ pub fn unbounded(s: &Statement) -> bool {
         Statement::Truncate(_) => true,
         _ => false,
     }
+}
+
+/// The columns a single-table UPDATE assigns (the last part of each target name, unquoted), for
+/// the undo plan: an UPDATE that changes a primary key cannot be undone by its old key. `None`
+/// for any other statement and for an UPDATE whose effect is wider than its SET list (SQLite
+/// `UPDATE OR REPLACE …` deletes conflicting rows, `UPDATE … FROM` joins).
+pub fn assigned(s: &Statement) -> Option<Vec<String>> {
+    let Statement::Update(u) = s else { return None };
+    if u.or.is_some() || u.from.is_some() || !u.table.joins.is_empty() {
+        return None;
+    }
+    let last = |n: &ObjectName| match n.0.last() {
+        Some(ObjectNamePart::Identifier(i)) => Some(i.value.clone()),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    for a in &u.assignments {
+        match &a.target {
+            AssignmentTarget::ColumnName(n) => out.push(last(n)?),
+            AssignmentTarget::Tuple(ns) => {
+                for n in ns {
+                    out.push(last(n)?);
+                }
+            }
+        }
+    }
+    Some(out)
 }
 
 /// `SELECT count(*) FROM <table> [WHERE …]` with the same WHERE as a single-table UPDATE /

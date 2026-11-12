@@ -220,3 +220,24 @@ fn a_write_outside_its_estimate_rolls_back() {
     assert!(statuses(&e.db).iter().all(|s| s == "paid"), "rolled back");
     assert!(services().audit().recent().iter().any(|a| a.proposal == Some(id) && a.kind == AuditKind::Failed));
 }
+
+#[test]
+fn an_update_that_changes_the_primary_key_offers_no_undo() {
+    let _g = serial();
+    let e = env("pkmove");
+    let mut d = driver(&e);
+    // undo by the old key would find no row (or the wrong one): refused, the write still runs
+    let id = propose(&mut d, &e, "UPDATE orders SET id = 100, status = 'moved' WHERE id = 4");
+    real_click(&mut d, &format!("quarry.approval.{}.approve", id.0));
+    assert_eq!(wait_until(&mut d, id, |s| s.is_terminal()), ProposalStatus::Done);
+    let exec = services().audit().recent().into_iter().find(|a| a.proposal == Some(id) && a.kind == AuditKind::Executed).unwrap();
+    assert_eq!(exec.rows_affected, Some(1));
+    assert_eq!(exec.undo_sql, None);
+    assert_eq!(quarry::agent::approval::card(id).and_then(|c| c.undo), None);
+    // a quoted, differently-cased key column is the same column
+    let id = propose(&mut d, &e, "UPDATE orders SET \"ID\" = 101 WHERE id = 5");
+    real_click(&mut d, &format!("quarry.approval.{}.approve", id.0));
+    assert_eq!(wait_until(&mut d, id, |s| s.is_terminal()), ProposalStatus::Done);
+    let exec = services().audit().recent().into_iter().find(|a| a.proposal == Some(id) && a.kind == AuditKind::Executed).unwrap();
+    assert_eq!(exec.undo_sql, None);
+}

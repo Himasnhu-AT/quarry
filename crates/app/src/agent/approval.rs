@@ -295,21 +295,23 @@ fn run_approved(p: &Proposal) -> Result<(u64, Option<Vec<String>>), String> {
         return Err("this connection is read-only for the person too".into());
     }
     // what runs is what was approved: the exact text, still exactly one statement the guard drafts
-    match quarry_guard::propose_write(&p.sql, e.spec().engine(), &e.policy()) {
-        Ok(w) if *w.sql == *p.sql => {}
+    let assigned = match quarry_guard::propose_write(&p.sql, e.spec().engine(), &e.policy()) {
+        Ok(w) if *w.sql == *p.sql => w.assigned,
         Ok(_) => return Err("the statement changed".into()),
         Err(r) => return Err(r.to_string()),
-    }
+    };
     let card = card(p.id);
-    let undo = card.as_ref().and_then(|c| undo_plan(&e, p, c));
+    let undo = card.as_ref().and_then(|c| undo_plan(&e, p, c, assigned.as_deref()));
     let out = e.with_human(|h| h.execute_in_tx(std::slice::from_ref(&p.sql), p.estimate)).map_err(|err| err.to_string())?;
     Ok((out.rows_affected, undo))
 }
 
 /// Statements that undo an UPDATE / DELETE of at most [`APPROVAL_PREVIEW_ROWS`] rows, from a
 /// snapshot taken just before it runs: re-INSERT deleted rows, UPDATE changed rows back by
-/// primary key. `None` when no inverse is possible (more rows, no key, clipped or binary cells).
-fn undo_plan(e: &ConnEntry, p: &Proposal, card: &Card) -> Option<Vec<String>> {
+/// primary key. `None` when no inverse is possible (more rows, no key, clipped or binary cells),
+/// and for an UPDATE that assigns a primary-key column or may touch more than its SET list
+/// (`assigned` is `None`): the rows would no longer be found by the keys in the snapshot.
+fn undo_plan(e: &ConnEntry, p: &Proposal, card: &Card, assigned: Option<&[String]>) -> Option<Vec<String>> {
     let rows_sql = card.rows_sql.as_ref()?;
     if !matches!(card.kind, WriteKind::Update | WriteKind::Delete) || p.estimate.is_none_or(|est| est.rows > u64::from(APPROVAL_PREVIEW_ROWS)) {
         return None;
@@ -341,6 +343,12 @@ fn undo_plan(e: &ConnEntry, p: &Proposal, card: &Card) -> Option<Vec<String>> {
                 .map(|k| columns.iter().position(|c| c.name == k.name))
                 .collect::<Option<Vec<usize>>>()?;
             if key.is_empty() {
+                return None;
+            }
+            // an UPDATE that moves a row to another key is not undone by its old key
+            let assigned = assigned?;
+            let changes_key = key.iter().filter_map(|i| columns.get(*i)).any(|k| assigned.iter().any(|a| a.eq_ignore_ascii_case(&k.name)));
+            if changes_key {
                 return None;
             }
             for row in &rows {
