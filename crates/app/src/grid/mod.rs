@@ -7,7 +7,7 @@ pub fn show(ui: &mut egui::Ui, state: &str) {
     let r = ui.weak(match state {
         "running" => "Running… (Cancel ⌘.)",
         "error" => "ERROR: relation \"orderz\" does not exist (line 1)",
-        _ => "No results yet. Run a statement with ⌘↵.",
+        _ => "No results yet. Run a statement with Cmd+Enter.",
     });
     automation::register(ui, &r, "quarry.grid", "Results", Role::Table);
 }

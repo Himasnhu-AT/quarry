@@ -36,7 +36,7 @@ fn toolbar(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>) {
     egui::Panel::top("quarry.toolbar").exact_size(theme::TOOLBAR).show(ui, |ui| {
         ui.horizontal_centered(|ui| {
             let active = cx.doc().active;
-            let run = ui.add_enabled(active.is_some(), egui::Button::new("Run ⌘↵"));
+            let run = ui.add_enabled(active.is_some(), egui::Button::new("Run"));
             automation::register(ui, &run, "quarry.toolbar.run", "Run", Role::Button);
             let ctx = ui.ctx().clone();
             if let (Some(tab), Some(t)) = (active, HumanTicket::from_click(&ctx, &run))
