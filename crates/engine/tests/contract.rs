@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! The engine contract in M0: both engines exist, refuse with `NotYet`, and SQLite is bundled.
-//! PostgreSQL tests (M1) run only when `QUARRY_PG_URL` is set.
+//! The engine contract: both engines exist, refuse a target of the other engine, and SQLite is
+//! bundled. PostgreSQL tests (tests/pg.rs) run only when `QUARRY_PG_URL` is set.
 
 use std::path::PathBuf;
 
@@ -20,15 +20,14 @@ fn sqlite_spec(path: PathBuf) -> ConnectionSpec {
 }
 
 #[test]
-fn engines_are_stubbed_and_refuse() {
+fn engines_refuse_the_other_engines_target() {
     let dir = tempfile::tempdir().unwrap();
     let spec = sqlite_spec(dir.path().join("x.sqlite"));
-    for kind in [EngineKind::Postgres, EngineKind::Sqlite] {
-        let e = engine(kind);
-        assert_eq!(e.kind(), kind);
-        assert_eq!(e.connect_human(&spec, None).err(), Some(EngineError::NotYet));
-        assert_eq!(e.connect_agent(&spec, None).err(), Some(EngineError::NotYet));
-    }
+    let pg = engine(EngineKind::Postgres);
+    assert_eq!(pg.kind(), EngineKind::Postgres);
+    assert!(matches!(pg.connect_human(&spec, None).err(), Some(EngineError::Connect(_))));
+    assert!(matches!(pg.connect_agent(&spec, None).err(), Some(EngineError::Connect(_))));
+    assert_eq!(engine(EngineKind::Sqlite).kind(), EngineKind::Sqlite);
 }
 
 #[test]

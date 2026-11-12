@@ -14,10 +14,23 @@ quarry-core = { workspace = true }
 quarry-guard = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
+serde_json = { workspace = true }
 tokio-postgres = { workspace = true }
-tokio = { workspace = true }
-rusqlite = { workspace = true }
+# `sync`: the per-connection state lock on the engine's runtime
+tokio = { workspace = true, features = ["sync"] }
+# `hooks`: the agent connection's authorizer and the progress handler (cancel, timeouts);
+# `column_decltype`: declared column types; `limits`: no ATTACH on the agent connection
+rusqlite = { workspace = true, features = ["hooks", "column_decltype", "limits"] }
+futures-util = { version = "0.3", default-features = false }
+# TLS for PostgreSQL: rustls with the ring provider (no C toolchain beyond ring's, builds for Windows)
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-postgres-rustls = "0.14"
+webpki-roots = "1"
 
 [dev-dependencies]
 quarry-guard = { workspace = true, features = ["unchecked"] }
 tempfile = { workspace = true }
+
+[[bench]]
+name = "stream"
+harness = false

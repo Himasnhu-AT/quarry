@@ -45,6 +45,7 @@ use std::sync::Arc;
 use quarry_core::{Column, ConnectionSpec, CursorId, EngineKind, Estimate, Page, PlanNode, Refusal, RefusalCode, SchemaTree, Secret, Total};
 pub use quarry_guard::ReadStatement;
 
+mod cells;
 pub mod pg;
 pub mod sqlite;
 
@@ -192,10 +193,52 @@ pub trait AgentConnection: Browse {
     fn explain(&mut self, stmt: &ReadStatement, analyze: bool) -> Result<PlanNode, EngineError>;
 }
 
+/// The statement inside an `EXPLAIN …` the classifier allowed, for `explain` (which adds its own
+/// `EXPLAIN`): skips `EXPLAIN`, SQLite's `QUERY PLAN`, PostgreSQL's `(…)` options and
+/// `ANALYZE` / `VERBOSE`. Anything else is returned as it is.
+pub(crate) fn strip_explain(sql: &str) -> &str {
+    fn word<'a>(s: &'a str, w: &str) -> Option<&'a str> {
+        let s = s.trim_start();
+        let head = s.get(..w.len())?;
+        let rest = s.get(w.len()..)?;
+        (head.eq_ignore_ascii_case(w) && rest.starts_with(|c: char| c.is_whitespace() || c == '(')).then_some(rest)
+    }
+    let Some(mut s) = word(sql, "explain") else { return sql };
+    if let Some(r) = word(s, "query").and_then(|r| word(r, "plan")) {
+        return r.trim_start();
+    }
+    let t = s.trim_start();
+    if let Some(r) = t.strip_prefix('(') {
+        match r.split_once(')') {
+            Some((_, rest)) => s = rest,
+            None => return sql,
+        }
+    }
+    while let Some(r) = word(s, "analyze").or_else(|| word(s, "analyse")).or_else(|| word(s, "verbose")) {
+        s = r;
+    }
+    s.trim_start()
+}
+
 /// The engine for `kind`.
 pub fn engine(kind: EngineKind) -> Box<dyn Engine> {
     match kind {
         EngineKind::Postgres => Box::new(pg::PgEngine),
         EngineKind::Sqlite => Box::new(sqlite::SqliteEngine),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_explain;
+
+    #[test]
+    fn explain_prefixes_are_stripped() {
+        assert_eq!(strip_explain("EXPLAIN QUERY PLAN SELECT 1"), "SELECT 1");
+        assert_eq!(strip_explain("explain select 1"), "select 1");
+        assert_eq!(strip_explain("EXPLAIN (ANALYZE, FORMAT JSON) SELECT 1"), "SELECT 1");
+        assert_eq!(strip_explain("EXPLAIN ANALYZE VERBOSE SELECT 1"), "SELECT 1");
+        assert_eq!(strip_explain("SELECT explained FROM t"), "SELECT explained FROM t");
+        assert_eq!(strip_explain("EXPLAIN (oops SELECT 1"), "EXPLAIN (oops SELECT 1");
     }
 }
