@@ -102,5 +102,5 @@ Newest last. One line per event: date, stream, what changed, who must know.
   session refuses statements not starting with SELECT/WITH/VALUES/TABLE/SHOW/EXPLAIN before the
   server, and runs `pg_advisory_unlock_all()` when an agent transaction ends. **lead**: CI's
   `postgres engine` job also runs `cargo test -p quarry --test agent_pg` (installs the GTK libs).
-  Re-blessed `grid-edits`, `approval-*` goldens. Committing clears the undo history (undo must not
+  Re-blessed `grid-edits` (macOS key names already matched the approval goldens). Committing clears the undo history (undo must not
   bring committed edits back).
