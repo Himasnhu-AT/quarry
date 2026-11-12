@@ -14,6 +14,7 @@ the lead.
 | claude | shell | wt/shell | `crates/app/src/{main.rs,view.rs,theme.rs,sidebar,editor,dialogs}/**` | review / merge | theme + fonts, sidebar schema tree, SQL editor (human-only run), history, connection dialog (keychain, agent access), table picker, every scene with pixel + accessibility goldens, `.ui` script test against the SQLite engine |
 | claude | agent | wt/agent | `crates/app/src/agent/**`, `crates/viz/**` | review / merge | 15 agent tools over MCP (guarded reads, redaction, row/size caps, rate limit, pause), `db.propose_write` → pending + counted estimate + preview, approval card (human-only approve/deny, ⌘⌥↵), approved write in a job via `execute_in_tx` with rollback outside the estimate, audit log + undo SQL, expiry, activity list with jump-to, egui charts (bar/line/area/scatter/histogram) + pivots; MCP, injected-input, Driver approve/deny/rollback and expiry tests |
 | claude | grid | wt/grid | `crates/app/src/grid/**` | review / merge | streaming grid on VirtualTable (page cache, cancel, 500k-row windows), sort (re-query / client), columns hide/reorder/freeze, cell popover, multi-cell copy TSV/CSV/JSON/INSERT, pending edits + DiffView/SQL, wired to the shell's runs; scenes, goldens, `.ui` script, scroll bench |
+| claude | finish | wt/finish | integration gaps across `crates/app/**`, engine pg agent gate | review / merge | `edit.commit` (diff + confirm, one transaction, audited with inverses), editable table tabs (PK from schema, read-only note), `grid.filter`, approved writes on the window's connection, live `agent_active` badge, PK-safe undo, app-level pg test in CI, scene key names pinned to macOS, pg agent keyword gate |
 | | bench | wt/bench | `bench/**`, `xtask/**` | | |
 
 Shared files (additive edits only, say so in the log): `crates/core/**`, `crates/app/src/ids.rs`,
@@ -90,3 +91,16 @@ Newest last. One line per event: date, stream, what changed, who must know.
   run `grid::edits::statements(doc.edits(tab), engine)` via `execute_in_tx`, then drop the set.
   Table tabs become editable with `GridState::editable(EditTarget { table, key })` (primary key
   from the schema) when the shell opens them.
+- 2026-11-12 · finish · QRY-FIN.* on `wt/finish`. Additive: guard `WriteStatement.assigned`
+  (columns an UPDATE's SET assigns; `None` for non-UPDATE, `UPDATE OR …`, `UPDATE … FROM`);
+  `services::SharedHuman`, `Connections::attach_human/detach_human`, `ConnEntry::uses_human`
+  (the shell attaches its connection on connect, so approved writes and commits run on it);
+  `grid.filter` gains optional `tab`, `where` and becomes a journaled `cmd!` (⌘F unchanged);
+  `GridState.read_only_note`; `DrawState.confirm`, `Action::AskCommit`; `editor::TabState`
+  `table_key` / `filter_text`; new `crate::table` (table-tab SELECT, PK target) and
+  `grid::commit`; `theme::platform(scene)` (scenes show macOS key names). **engine**: the pg agent
+  session refuses statements not starting with SELECT/WITH/VALUES/TABLE/SHOW/EXPLAIN before the
+  server, and runs `pg_advisory_unlock_all()` when an agent transaction ends. **lead**: CI's
+  `postgres engine` job also runs `cargo test -p quarry --test agent_pg` (installs the GTK libs).
+  Re-blessed `grid-edits`, `approval-*` goldens. Committing clears the undo history (undo must not
+  bring committed edits back).
