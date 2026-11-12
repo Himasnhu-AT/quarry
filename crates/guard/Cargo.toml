@@ -16,4 +16,4 @@ unchecked = []
 
 [dependencies]
 quarry-core = { workspace = true }
-sqlparser = { workspace = true }
+sqlparser = { workspace = true, features = ["visitor"] }

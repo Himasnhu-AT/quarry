@@ -35,6 +35,9 @@ pub enum RefusalCode {
     Database,
     /// Not built yet (M0 stubs).
     NotYet,
+    /// The statement uses a column marked sensitive other than as a plain output column (which
+    /// is redacted); filtering, sorting, aliasing or computing on it could leak its values.
+    Sensitive,
 }
 
 impl RefusalCode {
@@ -53,6 +56,7 @@ impl RefusalCode {
             RefusalCode::NotFound => "not_found",
             RefusalCode::Database => "database",
             RefusalCode::NotYet => "not_yet",
+            RefusalCode::Sensitive => "sensitive",
         }
     }
 }
@@ -84,7 +88,7 @@ mod tests {
     #[test]
     fn display_is_code_colon_message_and_codes_match_serde() {
         assert_eq!(Refusal::new(RefusalCode::NotReadOnly, "DELETE changes data").to_string(), "not_read_only: DELETE changes data");
-        for c in [RefusalCode::ParseError, RefusalCode::AgentAccessOff, RefusalCode::NotYet, RefusalCode::Database] {
+        for c in [RefusalCode::ParseError, RefusalCode::AgentAccessOff, RefusalCode::NotYet, RefusalCode::Database, RefusalCode::Sensitive] {
             assert_eq!(serde_json::to_value(c).unwrap(), serde_json::json!(c.as_str()));
         }
     }
