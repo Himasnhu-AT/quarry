@@ -63,8 +63,14 @@ pub struct ConnEntry {
     spec: ConnectionSpec,
     secret: Option<Secret>,
     agent: Mutex<Option<Box<dyn AgentConnection>>>,
-    human: Mutex<Option<Box<dyn HumanConnection>>>,
+    /// The person's connection: the window's own (`sidebar::connections::Human`, attached with
+    /// [`Connections::attach_human`]) or, without a window (`quarry-cli`, tests), one opened on
+    /// first use.
+    human: Mutex<Option<SharedHuman>>,
 }
+
+/// The person's connection, shared between the window, grid fetches, commits and approved writes.
+pub type SharedHuman = Arc<Mutex<Box<dyn HumanConnection>>>;
 
 impl ConnEntry {
     pub fn spec(&self) -> &ConnectionSpec {
@@ -95,19 +101,38 @@ impl ConnEntry {
         r.map_err(Refusal::from)
     }
 
-    /// Run `f` on the person's connection, opening it first. Only approved writes
-    /// (`crate::agent::approval`) and human-only actions call it, never an agent tool.
+    /// Run `f` on the person's connection: the window's when it attached one, else one opened
+    /// here on first use. Only approved writes (`crate::agent::approval`) and human-only actions
+    /// call it, never an agent tool.
     pub(crate) fn with_human<T>(&self, f: impl FnOnce(&mut dyn HumanConnection) -> Result<T, EngineError>) -> Result<T, EngineError> {
-        let mut slot = lock(&self.human);
-        if slot.is_none() {
-            *slot = Some(quarry_engine::engine(self.spec.engine()).connect_human(&self.spec, self.secret.as_ref())?);
-        }
-        let Some(conn) = slot.as_mut() else { return Err(EngineError::Closed) };
-        let r = f(conn.as_mut());
+        let human = {
+            let mut slot = lock(&self.human);
+            match slot.as_ref() {
+                Some(h) => Arc::clone(h),
+                None => {
+                    let h: SharedHuman =
+                        Arc::new(Mutex::new(quarry_engine::engine(self.spec.engine()).connect_human(&self.spec, self.secret.as_ref())?));
+                    *slot = Some(Arc::clone(&h));
+                    h
+                }
+            }
+        };
+        let r = {
+            let mut conn = human.lock().unwrap_or_else(PoisonError::into_inner);
+            f(conn.as_mut())
+        };
         if matches!(r, Err(EngineError::Closed)) {
-            *slot = None;
+            let mut slot = lock(&self.human);
+            if slot.as_ref().is_some_and(|h| Arc::ptr_eq(h, &human)) {
+                *slot = None;
+            }
         }
         r
+    }
+
+    /// Whether `human` is the connection [`ConnEntry::with_human`] uses.
+    pub fn uses_human(&self, human: &SharedHuman) -> bool {
+        lock(&self.human).as_ref().is_some_and(|h| Arc::ptr_eq(h, human))
     }
 }
 
@@ -147,6 +172,21 @@ impl Connections {
         all.retain(|e| e.spec.id != entry.spec.id);
         if all.len() < MAX_CONNECTIONS {
             all.push(entry);
+        }
+    }
+
+    /// Share the window's connection `human` with approved writes and commits of `id` (instead
+    /// of each opening its own). Nothing happens for an unregistered id.
+    pub fn attach_human(&self, id: &ConnectionId, human: SharedHuman) {
+        if let Some(e) = self.get(id.as_str()) {
+            *lock(&e.human) = Some(human);
+        }
+    }
+
+    /// Stop sharing the window's connection of `id` (the person disconnected).
+    pub fn detach_human(&self, id: &ConnectionId) {
+        if let Some(e) = self.get(id.as_str()) {
+            *lock(&e.human) = None;
         }
     }
 
@@ -233,6 +273,35 @@ pub fn now() -> Timestamp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn approved_writes_use_the_windows_connection_once_attached() {
+        use quarry_core::{AgentAccess, ConnColor, Target};
+        let dir = tempfile::tempdir().unwrap();
+        rusqlite::Connection::open(dir.path().join("s.sqlite")).unwrap();
+        let spec = ConnectionSpec {
+            id: ConnectionId::new("shared"),
+            name: "shared".into(),
+            target: Target::Sqlite { path: dir.path().join("s.sqlite") },
+            color: ConnColor::Local,
+            agent_access: AgentAccess::ReadOnly,
+            sensitive_patterns: vec![],
+            human_read_only: false,
+        };
+        let c = Connections::default();
+        c.register(spec.clone(), None);
+        let window: SharedHuman = Arc::new(Mutex::new(quarry_engine::engine(spec.engine()).connect_human(&spec, None).unwrap()));
+        c.attach_human(&spec.id, Arc::clone(&window));
+        let e = c.get("shared").unwrap();
+        assert!(e.uses_human(&window));
+        e.with_human(|h| h.execute_in_tx(&["CREATE TABLE t (a int)".to_string()], None)).unwrap();
+        assert!(e.uses_human(&window), "no second connection was opened");
+        // the window's connection sees the table: it is the same connection
+        let cur = window.lock().unwrap_or_else(PoisonError::into_inner).query("SELECT count(*) FROM t", &Default::default());
+        assert!(cur.is_ok());
+        c.detach_human(&spec.id);
+        assert!(!e.uses_human(&window));
+    }
 
     #[test]
     fn pause_flag_round_trips_and_clock_is_after_2020() {

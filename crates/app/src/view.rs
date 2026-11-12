@@ -259,6 +259,7 @@ impl Shell {
             },
             Request::Connect { connection } => self.connect(cx, &connection),
             Request::Disconnect { connection } => {
+                crate::services::services().connections().detach_human(&connection);
                 self.conns.live.remove(&connection);
                 self.conns_rev += 1;
             }
@@ -314,7 +315,10 @@ impl Shell {
                     crate::services::services().connections().register(spec.clone(), agent_secret);
                     let cancel = h.cancel_token();
                     let schema = h.schema(&SchemaFilter { max_tables: MAX_TABLES, ..Default::default() }).map_err(|e| e.to_string());
-                    Event::Connected { id, human: Arc::new(Mutex::new(h)), cancel, schema }
+                    let human: Human = Arc::new(Mutex::new(h));
+                    // approved writes and commits run on this same connection, not one of their own
+                    crate::services::services().connections().attach_human(&id, Arc::clone(&human));
+                    Event::Connected { id, human, cancel, schema }
                 }
                 Err(e) => Event::ConnectFailed { id, message: e.to_string() },
             };
@@ -645,7 +649,13 @@ impl Shell {
                 let agent = if agent_on { "agent: read-only" } else { "agent: off" };
                 let r = ui.label(small(agent));
                 automation::register(ui, &r, "quarry.status.agent", agent, Role::Status);
-                if agent_on && cx.view_or("agent_active", false) {
+                // lit while the agent works (a tool call in the last seconds, an approved write
+                // running); scenes set `agent_active`
+                let active = if self.screen.is_empty() { agent::active_for(crate::services::now()) } else { None };
+                if let Some(ms) = active {
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(ms));
+                }
+                if agent_on && (active.is_some() || cx.view_or("agent_active", false)) {
                     ui.add_space(6.0);
                     badge(ui, "quarry.status.read_only", "READ-ONLY", theme::INFO);
                 }
@@ -819,6 +829,7 @@ impl Shell {
             sidebar::Action::NewConnection => self.dialog = Some(Open::Connection(Box::default())),
             sidebar::Action::Connect(id) => self.connect(cx, &id),
             sidebar::Action::Disconnect(id) => {
+                crate::services::services().connections().detach_human(&id);
                 self.conns.live.remove(&id);
                 self.conns_rev += 1;
             }

@@ -69,6 +69,11 @@ pub fn latest(n: usize) -> Vec<Activity> {
     log().items.iter().rev().take(n).cloned().collect()
 }
 
+/// When the newest tool call was recorded (`None`: none yet).
+pub fn last_at() -> Option<Timestamp> {
+    log().items.back().map(|a| a.at)
+}
+
 /// The sequence number of the newest entry (0: none yet); the panel redraws when it moves.
 pub fn revision() -> u64 {
     SEQ.load(Ordering::Relaxed)
