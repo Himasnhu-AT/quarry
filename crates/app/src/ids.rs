@@ -380,7 +380,18 @@ pub fn commands() -> Vec<CommandSpec<S>> {
         query!("query.explain", "Explain", [Param::int_in("tab", 1, i64::MAX)], not_yet).shortcut("Mod+E"),
         cmd!("query.format", "Format SQL", ["Query"], None, [Param::int_in("tab", 1, i64::MAX)], always, crate::editor::commands::query_format),
         query!("history.show", "Query History", [Param::string("search")], crate::editor::commands::history_show),
-        query!("grid.filter", "Filter Grid", [], not_yet).shortcut("Mod+F"),
+        cmd!(
+            "grid.filter",
+            "Filter Grid",
+            [],
+            Some("Mod+F"),
+            [
+                Param::int_in("tab", 1, i64::MAX).about("table tab id (default: the active tab)"),
+                Param::string("where").about("a WHERE clause, checked by the guard; empty clears; omitted focuses the filter field")
+            ],
+            always,
+            grid::commands::filter
+        ),
         query!("grid.sort", "Sort Grid", [TAB, Param::string("column").required(), Param::bool("descending")], grid::commands::sort),
         query!("grid.copy", "Copy Rows", [Param::one_of("format", &["tsv", "csv", "json", "insert"]).about("default tsv")], grid::commands::copy),
         cmd!("edit.cell", "Edit Cell", [], Some("F2"), [], always, grid::commands::edit_cell),

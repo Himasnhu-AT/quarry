@@ -73,6 +73,10 @@ pub struct TabState {
     /// Char indices of the selection (`primary`, `secondary`).
     pub cursor: Option<(usize, usize)>,
     pub run: Option<RunState>,
+    /// A table tab: what its grid shows (`connection|table|filter`); a change reloads it.
+    pub table_key: Option<String>,
+    /// A table tab: the filter field's text while the person types (`None`: shows the tab's).
+    pub filter_text: Option<String>,
     highlight: Option<(u64, egui::text::LayoutJob)>,
     request_focus: bool,
 }
@@ -171,12 +175,13 @@ pub fn show(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>, tab: &Tab, st: &mut T
     let TabKind::Editor { sql: doc_sql } = &tab.kind else {
         if let TabKind::Table { table, filter } = &tab.kind {
             ui.add_space(8.0);
-            let text = match filter {
-                Some(f) => format!("{table}  ·  WHERE {f}"),
-                None => table.to_string(),
-            };
-            let r = ui.label(egui::RichText::new(text).monospace().color(t.text.secondary));
-            automation::register(ui, &r, "quarry.editor.table", &tab.title, Role::Label);
+            ui.horizontal(|ui| {
+                let r = ui.label(egui::RichText::new(table.to_string()).monospace().color(t.text.secondary));
+                automation::register(ui, &r, "quarry.editor.table", &tab.title, Role::Label);
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new("WHERE").monospace().color(t.text.disabled));
+                filter_field(ui, cx, tab, filter.as_deref(), st);
+            });
         }
         return;
     };
@@ -258,6 +263,30 @@ pub fn show(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>, tab: &Tab, st: &mut T
             }
         });
     });
+}
+
+/// A table tab's filter: Enter applies it through `grid.filter` (guard-checked), empty clears.
+fn filter_field(ui: &mut egui::Ui, cx: &mut Cx<'_, Workspace>, tab: &Tab, applied: Option<&str>, st: &mut TabState) {
+    let mut text = st.filter_text.clone().unwrap_or_else(|| applied.unwrap_or("").to_string());
+    let r = ui.add(
+        egui::TextEdit::singleline(&mut text)
+            .id(egui::Id::new(("quarry.grid.filter", tab.id.0)))
+            .font(FontId::monospace(theme::MONO_SIZE))
+            .hint_text("status = 'paid'  (Cmd+F, Enter applies)")
+            .desired_width(ui.available_width().min(520.0)),
+    );
+    automation::register(ui, &r, "quarry.grid.filter", "Filter", Role::Field);
+    if cx.view::<u64>(crate::grid::commands::FILTER_FOCUS) == Some(tab.id.0) {
+        r.request_focus();
+        cx.set_view(crate::grid::commands::FILTER_FOCUS, &0u64);
+    }
+    if r.changed() {
+        st.filter_text = Some(text.clone());
+    }
+    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        st.filter_text = None;
+        cx.dispatch(crate::ids::GRID_FILTER, json!({"tab": tab.id, "where": text}));
+    }
 }
 
 /// The inline error banner under the editor, with the error's line and column when the server

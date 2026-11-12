@@ -16,6 +16,7 @@ pub mod cache;
 pub mod cells;
 pub mod columns;
 pub mod commands;
+pub mod commit;
 pub mod copy;
 pub mod draw;
 pub mod edits;
@@ -34,8 +35,6 @@ use quarry_core::{PendingEdits, TabId, Workspace};
 
 pub use draw::{Action, DrawState};
 pub use model::{EditTarget, GridState, Spawner, Status};
-
-use crate::human::{self, HumanAction};
 
 /// A tab's grid and its drawing state.
 #[derive(Default)]
@@ -252,10 +251,19 @@ fn apply_action(cx: &mut Cx<'_, Workspace>, tab: TabId, g: &mut GridState, ds: &
             discard(cx.session_mut(), tab);
             ds.review = false;
         }
-        Action::ToggleReview => ds.review = !ds.review,
+        Action::ToggleReview => {
+            ds.review = !ds.review;
+            ds.confirm = false;
+        }
+        Action::AskCommit => {
+            ds.review = true;
+            ds.confirm = true;
+        }
         Action::Commit(ticket) => {
-            if let Err(e) = human::perform(cx.session_mut(), ticket, HumanAction::CommitEdits { tab }) {
-                g.notice = Some(e.to_string());
+            ds.confirm = false;
+            match commit::start(cx, ticket, tab) {
+                Ok(()) => g.notice = Some("Committing…".into()),
+                Err(e) => g.notice = Some(format!("Cannot commit: {e}")),
             }
         }
     }

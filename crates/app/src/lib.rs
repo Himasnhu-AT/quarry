@@ -13,6 +13,7 @@ pub mod ids;
 pub mod scenes;
 pub mod services;
 pub mod sidebar;
+pub mod table;
 pub mod theme;
 pub mod view;
 

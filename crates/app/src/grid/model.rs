@@ -109,6 +109,8 @@ pub struct GridState {
     pub editing: Option<(u64, usize, String)>,
     /// A line for the grid's footer (copied, refused…).
     pub notice: Option<String>,
+    /// Why a table tab's grid is read-only (no primary key, a view…), shown in the footer.
+    pub read_only_note: Option<String>,
     /// Text to put on the clipboard on the next frame.
     pub clipboard: Option<String>,
     /// Ask the list to scroll to this shown row on the next frame.
@@ -152,6 +154,7 @@ impl GridState {
             detail: None,
             editing: None,
             notice: None,
+            read_only_note: None,
             clipboard: None,
             scroll_to: None,
             requested_sort: None,

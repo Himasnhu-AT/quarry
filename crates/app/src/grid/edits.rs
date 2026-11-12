@@ -15,6 +15,16 @@ use super::copy::{ident, literal, table_ident};
 /// Refused when a key or a new value is only partly loaded (it would write the wrong row or a
 /// truncated value).
 pub fn statements(e: &PendingEdits, dialect: EngineKind) -> Result<Vec<String>, String> {
+    Ok(with_undo(e, dialect)?.into_iter().map(|(s, _)| s).collect())
+}
+
+/// [`statements`], each with the statement that undoes it (`None`: no exact inverse, e.g. an
+/// INSERT that leaves its key to the database, or a deleted row only partly loaded). Run the
+/// inverses newest first.
+///
+/// An UPDATE that changes primary-key columns is undone by key **after** the change: its inverse
+/// finds the row by the new key values and sets every edited column, key included, back.
+pub fn with_undo(e: &PendingEdits, dialect: EngineKind) -> Result<Vec<(String, Option<String>)>, String> {
     if e.key.is_empty() {
         return Err("the table has no primary key: its rows cannot be edited".into());
     }
@@ -29,32 +39,52 @@ pub fn statements(e: &PendingEdits, dialect: EngineKind) -> Result<Vec<String>, 
     };
     let mut out = Vec::new();
     for c in &e.changes {
-        if let RowChange::Delete { key, .. } = c {
-            out.push(format!("DELETE FROM {table} WHERE {};", where_of(key)?));
+        if let RowChange::Delete { key, before } = c {
+            let undo = (!before.is_empty())
+                .then(|| {
+                    let cols = before.iter().map(|(c, _)| ident(c)).collect::<Vec<_>>().join(", ");
+                    let vals = before.iter().map(|(_, v)| literal(v, dialect)).collect::<Option<Vec<_>>>()?.join(", ");
+                    Some(format!("INSERT INTO {table} ({cols}) VALUES ({vals});"))
+                })
+                .flatten();
+            out.push((format!("DELETE FROM {table} WHERE {};", where_of(key)?), undo));
         }
     }
-    // updates grouped by row, rows in the order first edited
-    let mut rows: Vec<(&Vec<Value>, Vec<(&str, &Value)>)> = Vec::new();
+    // updates grouped by row, rows in the order first edited: (column, old, new)
+    let mut rows: Vec<(&Vec<Value>, Vec<(&str, &Value, &Value)>)> = Vec::new();
     for c in &e.changes {
-        if let RowChange::Update { key, column, new, .. } = c {
+        if let RowChange::Update { key, column, old, new } = c {
             match rows.iter_mut().find(|(k, _)| *k == key) {
-                Some((_, sets)) => sets.push((column, new)),
-                None => rows.push((key, vec![(column, new)])),
+                Some((_, sets)) => sets.push((column, old, new)),
+                None => rows.push((key, vec![(column, old, new)])),
             }
         }
     }
     for (key, sets) in rows {
-        let sets = sets.iter().map(|(c, v)| Ok(format!("{} = {}", ident(c), lit(v)?))).collect::<Result<Vec<_>, String>>()?;
-        out.push(format!("UPDATE {table} SET {} WHERE {};", sets.join(", "), where_of(key)?));
+        let forward = sets.iter().map(|(c, _, v)| Ok(format!("{} = {}", ident(c), lit(v)?))).collect::<Result<Vec<_>, String>>()?;
+        // the row's key once this UPDATE ran: an edited key column has its new value
+        let after: Vec<Value> =
+            e.key.iter().zip(key.iter()).map(|(k, v)| sets.iter().find(|(c, _, _)| *c == k.as_str()).map_or(v, |(_, _, new)| *new).clone()).collect();
+        let undo = sets
+            .iter()
+            .map(|(c, old, _)| literal(old, dialect).map(|l| format!("{} = {l}", ident(c))))
+            .collect::<Option<Vec<_>>>()
+            .and_then(|back| Some(format!("UPDATE {table} SET {} WHERE {};", back.join(", "), where_of(&after).ok()?)));
+        out.push((format!("UPDATE {table} SET {} WHERE {};", forward.join(", "), where_of(key)?), undo));
     }
     for values in e.inserts() {
+        // the new row is found by its key only when every key column was given
+        let undo = || -> Option<String> {
+            let key: Vec<Value> = e.key.iter().map(|k| values.iter().find(|(c, _)| c == k).map(|(_, v)| v.clone())).collect::<Option<_>>()?;
+            Some(format!("DELETE FROM {table} WHERE {};", where_of(&key).ok()?))
+        };
         if values.is_empty() {
-            out.push(format!("INSERT INTO {table} DEFAULT VALUES;"));
+            out.push((format!("INSERT INTO {table} DEFAULT VALUES;"), None));
             continue;
         }
         let cols = values.iter().map(|(c, _)| ident(c)).collect::<Vec<_>>().join(", ");
         let vals = values.iter().map(|(_, v)| lit(v)).collect::<Result<Vec<_>, String>>()?.join(", ");
-        out.push(format!("INSERT INTO {table} ({cols}) VALUES ({vals});"));
+        out.push((format!("INSERT INTO {table} ({cols}) VALUES ({vals});"), undo()));
     }
     Ok(out)
 }
@@ -177,6 +207,30 @@ mod tests {
                 "INSERT INTO \"public\".\"orders\" (\"customer_id\", \"status\") VALUES (3, 'pending');",
             ]
         );
+    }
+
+    #[test]
+    fn every_statement_has_its_inverse_and_key_changes_are_undone_by_the_new_key() {
+        let s = with_undo(&edits(), EngineKind::Sqlite).unwrap();
+        let undo: Vec<Option<&str>> = s.iter().map(|(_, u)| u.as_deref()).collect();
+        assert_eq!(
+            undo,
+            vec![
+                Some("INSERT INTO \"public\".\"orders\" (\"id\", \"status\") VALUES (9, 'pending');"),
+                Some("UPDATE \"public\".\"orders\" SET \"status\" = 'paid', \"total_cents\" = 100 WHERE \"id\" = 5;"),
+                Some("UPDATE \"public\".\"orders\" SET \"note\" = NULL WHERE \"id\" = 7;"),
+                None, // the new row's key is the database's
+            ]
+        );
+        // the person edits the key itself: forward by the old key, back by the new one
+        let mut e = PendingEdits::new(TabId(1), TableRef::new(None, "t"), vec!["a".into(), "b".into()]);
+        e.set(vec![Value::Int(1), Value::Int(2)], "b", Value::Int(2), Value::Int(20));
+        e.set(vec![Value::Int(1), Value::Int(2)], "v", Value::text("x"), Value::text("y"));
+        e.insert(vec![("a".into(), Value::Int(3)), ("b".into(), Value::Int(4))]);
+        let s = with_undo(&e, EngineKind::Sqlite).unwrap();
+        assert_eq!(s[0].0, "UPDATE \"t\" SET \"b\" = 20, \"v\" = 'y' WHERE \"a\" = 1 AND \"b\" = 2;");
+        assert_eq!(s[0].1.as_deref(), Some("UPDATE \"t\" SET \"b\" = 2, \"v\" = 'x' WHERE \"a\" = 1 AND \"b\" = 20;"));
+        assert_eq!(s[1].1.as_deref(), Some("DELETE FROM \"t\" WHERE \"a\" = 3 AND \"b\" = 4;"));
     }
 
     #[test]

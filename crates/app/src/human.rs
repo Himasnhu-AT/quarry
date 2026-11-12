@@ -127,7 +127,7 @@ impl HumanAction {
 /// Run a human-only action. The ticket is consumed: one click, one action. Approve / deny go to
 /// `crate::agent::approval` (approve also marks the proposal running: the caller runs
 /// `crate::agent::approval::execute` in a job).
-pub fn perform(_session: &mut Session<Workspace>, _ticket: HumanTicket, action: HumanAction) -> Result<Value, CommandError> {
+pub fn perform(session: &mut Session<Workspace>, ticket: HumanTicket, action: HumanAction) -> Result<Value, CommandError> {
     log::info!("human action {}", action.id());
     match action {
         HumanAction::PauseAgent | HumanAction::ResumeAgent => {
@@ -137,6 +137,10 @@ pub fn perform(_session: &mut Session<Workspace>, _ticket: HumanTicket, action: 
         }
         HumanAction::ApproveProposal(id) => crate::agent::approval::approve(id),
         HumanAction::DenyProposal(id) => crate::agent::approval::deny(id),
+        // blocking: the window commits in a job (`crate::grid::commit::start`)
+        HumanAction::CommitEdits { tab } => crate::grid::commit::commit_now(session, ticket, tab)
+            .map(|rows| json!({"tab": tab, "rows_affected": rows}))
+            .map_err(|e| CommandError::failed(ids::EDIT_COMMIT, e)),
         _ => Err(CommandError::failed(action.id(), Refusal::new(RefusalCode::NotYet, "not yet").to_string())),
     }
 }

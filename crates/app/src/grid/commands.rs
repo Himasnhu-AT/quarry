@@ -5,11 +5,12 @@
 //! person's Commit click.
 
 use ashlar::prelude::*;
-use quarry_core::{TabId, Workspace};
+use quarry_core::{Tab, TabId, TabKind, Workspace};
 
 use super::copy::Format;
 use super::source::Order;
 use super::{GridState, draw, with_grid};
+use crate::services::services;
 
 type S = Session<Workspace>;
 type R = Result<Value, CommandError>;
@@ -49,6 +50,42 @@ pub fn sort(s: &mut S, p: &Value) -> R {
         on_grid(s, tab, |g, _| g.columns.iter().position(|c| c.name == name))?.ok_or_else(|| fail(format!("unknown_column: no column `{name}`")))?;
     on_grid(s, tab, |g, _| g.requested_sort = Some(Some(Order { column: col, descending })))?;
     Ok(json!({"tab": tab, "column": name, "descending": descending}))
+}
+
+/// View-state key: the table tab whose filter field takes focus on the next frame (⌘F).
+pub const FILTER_FOCUS: &str = "grid.filter_focus";
+
+/// `grid.filter {tab, where}` (⌘F): filter a table tab. Without `where`, focus the tab's filter
+/// field; an empty `where` clears the filter; otherwise the clause must pass
+/// `quarry_guard::check_filter` (the same check as the agent's `view.filter`), and its canonical
+/// rendering becomes the tab's filter, which re-reads the table with that WHERE.
+pub fn filter(s: &mut S, p: &Value) -> R {
+    let tab = match p.get("tab").and_then(Value::as_u64) {
+        Some(t) => TabId(t),
+        None => active(s)?,
+    };
+    let doc = s.snapshot();
+    let t = doc.tab(tab).ok_or_else(|| fail(format!("not_found: no tab {}", tab.0)))?;
+    let (TabKind::Table { .. }, Some(conn)) = (&t.kind, &t.connection) else {
+        return Err(fail("not_table: filters apply to table tabs (open one with table.open)"));
+    };
+    let Some(clause) = p.get("where").and_then(Value::as_str) else {
+        s.set_view(FILTER_FOCUS, &tab.0);
+        return Ok(json!({"tab": tab, "focus": true}));
+    };
+    let applied = if clause.trim().is_empty() {
+        None
+    } else {
+        let e = services().connections().get(conn.as_str()).ok_or_else(|| fail(format!("unknown_connection: `{conn}` is not open")))?;
+        Some(quarry_guard::check_filter(clause, e.spec().engine(), &e.policy()).map_err(|r| fail(r.to_string()))?)
+    };
+    let set = applied.clone();
+    s.edit("Filter Table", |w| {
+        if let Some(Tab { kind: TabKind::Table { filter, .. }, .. }) = w.tab_mut(tab) {
+            *filter = set;
+        }
+    });
+    Ok(json!({"tab": tab, "where": applied}))
 }
 
 /// `edit.cell` (F2): edit the cell at the cursor.

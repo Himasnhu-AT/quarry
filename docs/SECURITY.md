@@ -110,7 +110,8 @@ lock, pragma, select, other), the tables it writes (incl. inside CTEs and `SELEC
 `unbounded` (UPDATE / DELETE without WHERE, TRUNCATE), and the estimate hook `count`: for a
 single-table UPDATE / DELETE, `SELECT count(*) FROM <table> WHERE <same where>` as a classified
 `ReadStatement` for the agent connection (`None` when the WHERE is not itself a safe read, or the
-statement joins). `approve_similar_allowed()` is false for anything but bounded row DML.
+statement joins), and `assigned`: the columns a single-table UPDATE's SET assigns (`None` when its
+effect is wider, e.g. `UPDATE OR REPLACE`; used by the undo rule). `approve_similar_allowed()` is false for anything but bounded row DML.
 
 ### Known limits of layer B (layer A must hold on its own)
 - PostgreSQL resolves `t.f` as a call of `f(t)` when no column `f` exists, and type input functions,
@@ -153,9 +154,24 @@ statement joins). `approve_similar_allowed()` is false for anything but bounded 
   runs exactly the proposal's text, re-checked as one statement by `propose_write`, with the counted
   estimate as `execute_in_tx`'s check (tolerance 10 %); a proposal without an estimate (INSERT,
   joins, DDL) says so on the card and runs without a row check. Undo statements are written for
-  UPDATE / DELETE of ≤ 20 rows with a known key. Agent scenes (`ui.scene`) only change view state.
-  Tests: `crates/app/tests/agent_mcp.rs`, `agent_approval.rs` (injected `ui.click` / `ui.press` /
-  `.ui` script on Approve do nothing; a real click or key press approves), `agent_expiry.rs`.
+  UPDATE / DELETE of ≤ 20 rows with a known key; none for an UPDATE that assigns a primary-key
+  column, or whose effect is wider than its SET list (`UPDATE OR REPLACE`, `UPDATE … FROM`): its
+  rows would no longer be found by the old keys. An approved write runs on the window's own human
+  connection (`Connections::attach_human`), not a second one. Agent scenes (`ui.scene`) only
+  change view state. Tests: `crates/app/tests/agent_mcp.rs`, `agent_approval.rs` (injected
+  `ui.click` / `ui.press` / `.ui` script on Approve do nothing; a real click or key press approves;
+  a key-changing UPDATE offers no undo), `agent_expiry.rs`, and `agent_pg.rs` (the same path on
+  PostgreSQL, when `QUARRY_PG_URL` is set).
+- **Committing edits** (`edit.commit`, human-only): Commit… opens the diff and the SQL; a second
+  click on Commit under it (a `HumanTicket`) runs the statements in one transaction on the
+  person's connection, each audited (`human_write`) with its inverse (an UPDATE that changes the
+  key is undone by the new key). On failure nothing changes and the edits stay pending; on success
+  they are cleared with the undo history. Refused on a read-only connection.
+- **Table tabs** read on the person's connection with `SELECT * FROM <quoted table> [WHERE …]`,
+  built by the app. The filter (from `grid.filter` or `view.filter`, both registered, so an agent
+  can set it) passes `check_filter` when set and again before each load (a workspace file can
+  carry any text), and the whole statement must classify as a read. Tables without a primary key,
+  views and read-only connections are not editable.
 
 ## Layer D: limits
 - Statement timeout (default 15 s) and row cap (default 5,000) on agent queries.

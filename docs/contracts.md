@@ -49,7 +49,8 @@ MCP names (`ToolMode::PerCommand`) replace dots with underscores: `db_query`, `v
 database, decides a proposal or changes agent access): `palette.open` (⌘K), `conn.new`,
 `conn.edit`, `conn.open`, `conn.close`, `conn.test`, `tab.new_editor` (⌘T), `tab.close`,
 `tab.select`, `table.open` (⌘P), `query.cancel` (⌘.), `query.explain` (⌘E, plain EXPLAIN),
-`query.format`, `history.show`, `grid.filter` (⌘F), `grid.sort`, `grid.copy` (`format` ∈ tsv, csv,
+`query.format`, `history.show`, `grid.filter` (⌘F; optional `tab`, `where`: guard-checked, empty
+clears, omitted focuses the filter field), `grid.sort`, `grid.copy` (`format` ∈ tsv, csv,
 json, insert), `edit.cell` (F2), `edit.add_row`, `edit.delete_rows`, `edit.discard`,
 `edit.review` (⌘⌥S: shows the diff), `agent.toggle_panel` (⌘L), `proposal.focus` (⌘⇧A).
 

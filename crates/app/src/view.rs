@@ -70,6 +70,15 @@ enum Event {
         id: ConnectionId,
         message: String,
     },
+    /// A table tab's rows (or why they could not be read).
+    TableLoaded {
+        tab: TabId,
+        key: String,
+        connection: ConnectionId,
+        table: quarry_core::TableRef,
+        sql: String,
+        result: Result<editor::Rows, String>,
+    },
     /// `dialog`: the test came from the dialog's draft.
     Tested {
         name: String,
@@ -375,6 +384,26 @@ impl Shell {
                     self.conns.live_mut(&id).status = Status::Failed(message);
                     self.conns_rev += 1;
                 }
+                Event::TableLoaded { tab, key, connection, table, sql, result } => {
+                    // a newer load (another filter) replaced this one
+                    if self.tabs.get(&tab).and_then(|t| t.table_key.as_deref()) != Some(key.as_str()) {
+                        continue;
+                    }
+                    match (result, self.conns.human(&connection), self.conns.spec(&connection).cloned()) {
+                        (Ok(rows), Some(human), Some(spec)) => {
+                            let schema = self.conns.live.get(&connection).and_then(|l| l.schema.clone());
+                            let target = crate::table::edit_target(&spec, schema.as_deref(), &table, &rows.columns);
+                            let r = (rows.columns.clone(), rows.total, rows.cursor, rows.first.clone());
+                            grid::open_rows(cx.session_mut(), tab, human, r, &sql, spec.engine());
+                            grid::with_grid(cx.session(), tab, |g, _| match target {
+                                Ok(t) => g.target = Some(t),
+                                Err(note) => g.read_only_note = Some(note),
+                            });
+                        }
+                        (Ok(_), _, _) => grid::attach(cx.session_mut(), tab, grid::GridState::error("the connection closed", None)),
+                        (Err(e), _, _) => grid::attach(cx.session_mut(), tab, grid::GridState::error(e, None)),
+                    }
+                }
                 Event::Tested { name, dialog, result } => {
                     if let (true, Some(Open::Connection(d))) = (dialog, self.dialog.as_mut()) {
                         d.test = Some(match result {
@@ -419,6 +448,54 @@ impl Shell {
                 cx.set_view("query_state", &state);
             }
         }
+    }
+
+    /// Load a table tab's rows when its grid is missing or its table / filter changed: a read on
+    /// the person's connection (`crate::table`), in a job.
+    fn load_table(
+        &mut self,
+        cx: &mut Cx<'_, Workspace>,
+        tab: TabId,
+        conn: Option<&ConnectionId>,
+        table: &quarry_core::TableRef,
+        filter: Option<&str>,
+    ) {
+        let Some(conn) = conn else { return };
+        let key = format!("{conn}|{table}|{}", filter.unwrap_or(""));
+        let has_grid = grid::with_grid(cx.session(), tab, |_, _| ()).is_some();
+        let st = self.tabs.entry(tab).or_default();
+        match &st.table_key {
+            // a grid someone else attached (a scene): keep it
+            None if has_grid => {
+                st.table_key = Some(key);
+                return;
+            }
+            Some(k) if *k == key && has_grid => return,
+            _ => {}
+        }
+        let Some(spec) = self.conns.spec(conn).cloned() else { return };
+        let Some(human) = self.conns.human(conn) else {
+            if self.screen.is_empty() && self.conns.status(conn) == Status::Closed {
+                self.connect(cx, conn);
+            }
+            return;
+        };
+        st.table_key = Some(key.clone());
+        let sql = match crate::table::select_sql(&spec, table, filter) {
+            Ok(sql) => sql,
+            Err(e) => {
+                grid::attach(cx.session_mut(), tab, grid::GridState::error(e, None));
+                return;
+            }
+        };
+        grid::attach(cx.session_mut(), tab, grid::GridState::running());
+        let events = Arc::clone(&self.events);
+        let (connection, table) = (conn.clone(), table.clone());
+        cx.jobs.job("query", format!("Reading {table}")).spawn((human, sql), move |(human, sql), _| {
+            let result = crate::table::load(&human, &sql);
+            events.lock().unwrap_or_else(PoisonError::into_inner).push(Event::TableLoaded { tab, key, connection, table, sql, result });
+            Ok(apply(|_: &mut Session<Workspace>| Ok(Value::Null)))
+        });
     }
 
     fn active_connection(&self, cx: &Cx<'_, Workspace>) -> Option<ConnectionId> {
@@ -676,6 +753,9 @@ impl Shell {
             return;
         };
         self.tab_strip(ui, cx, &doc.tabs, tab.id);
+        if let TabKind::Table { table, filter } = &tab.kind {
+            self.load_table(cx, tab.id, tab.connection.as_ref(), table, filter.as_deref());
+        }
         let t = tokens::current(ui.ctx());
         let st = self.tabs.entry(tab.id).or_default();
         let editor_frame = egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin { left: 0, right: 8, top: 8, bottom: 4 });
@@ -687,7 +767,9 @@ impl Shell {
             .max_size((h - 80.0).max(81.0))
             .frame(editor_frame)
             .show(ui, |ui| editor::show(ui, cx, tab, st));
+        let table_tab = matches!(tab.kind, TabKind::Table { .. });
         let (state, error) = match &st.run {
+            _ if table_tab => ("results".to_string(), None),
             Some(RunState::Running { .. }) => ("running".to_string(), None),
             Some(RunState::Done(o)) => match &o.result {
                 Ok(_) => ("results".to_string(), None),

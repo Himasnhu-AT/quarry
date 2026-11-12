@@ -48,7 +48,10 @@ pub enum Action {
     AddRow,
     Discard,
     ToggleReview,
-    /// The person clicked Commit (a human-only action: the ticket proves the click).
+    /// Commit… was clicked: show the diff and ask to confirm.
+    AskCommit,
+    /// The person confirmed the commit under the diff (a human-only action: the ticket proves
+    /// the click).
     Commit(HumanTicket),
 }
 
@@ -56,6 +59,8 @@ pub enum Action {
 #[derive(Default)]
 pub struct DrawState {
     pub review: bool,
+    /// The review is open to confirm a commit (Commit… was clicked).
+    pub confirm: bool,
     pub diff: DiffViewState,
     /// Horizontal wheel travel not yet turned into whole columns.
     pub wheel_x: f32,
@@ -194,6 +199,10 @@ fn bar(ui: &mut egui::Ui, id: &str, g: &mut GridState, actions: &mut Vec<Action>
             g.set_window(g.window.saturating_add(WINDOW_ROWS));
             g.scroll_to = Some(0);
         }
+    }
+    if let Some(n) = &g.read_only_note {
+        let r = b.label(egui::RichText::new(format!("· {n}")).color(theme::MUTED).size(12.0));
+        automation::register(&b, &r, &format!("{id}.read_only"), n, Role::Label);
     }
     if let Some(n) = &g.notice {
         b.label(egui::RichText::new(format!("· {n}")).color(theme::INFO).size(12.0));
@@ -663,9 +672,9 @@ fn pending_bar(ui: &mut egui::Ui, id: &str, g: &GridState, ds: &mut DrawState, e
     b.with_layout(egui::Layout::right_to_left(egui::Align::Center), |b| {
         let commit = b.button(egui::RichText::new("Commit…").color(theme::TEXT));
         automation::register(b, &commit, &format!("{id}.commit"), "Commit pending changes", Role::Button);
-        let ctx = b.ctx().clone();
-        if let Some(t) = HumanTicket::from_click(&ctx, &commit) {
-            actions.push(Action::Commit(t));
+        // the diff first: committing is the confirm button under it
+        if commit.clicked() {
+            actions.push(Action::AskCommit);
         }
         let review = b.selectable_label(ds.review, "Review").on_hover_text("Review pending changes (Cmd+Alt+S)");
         automation::register_with(
@@ -687,10 +696,13 @@ fn pending_bar(ui: &mut egui::Ui, id: &str, g: &GridState, ds: &mut DrawState, e
     });
     if ds.review {
         let diff = [super::edits::diff(e)];
-        let sql = match super::edits::statements(e, g.dialect) {
-            Ok(s) => s.join("\n"),
-            Err(m) => format!("-- cannot commit: {m}"),
+        let (sql, n) = match super::edits::statements(e, g.dialect) {
+            Ok(s) => (s.join("\n"), Some(s.len())),
+            Err(m) => (format!("-- cannot commit: {m}"), None),
         };
+        if ds.confirm {
+            confirm_strip(ui, id, g, ds, n, actions);
+        }
         let h = ui.available_height();
         let rev = g.revision ^ (e.changes.len() as u64).rotate_left(32);
         ui.horizontal_top(|ui| {
@@ -704,6 +716,34 @@ fn pending_bar(ui: &mut egui::Ui, id: &str, g: &GridState, ds: &mut DrawState, e
             });
         });
     }
+}
+
+/// Under the pending bar while confirming: what will run, Commit (needs the person's click) and
+/// Cancel.
+fn confirm_strip(ui: &mut egui::Ui, id: &str, g: &GridState, ds: &mut DrawState, n: Option<usize>, actions: &mut Vec<Action>) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), BAR_H + 4.0), Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, theme::RAISED);
+    let mut b = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(vec2(8.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    let table = g.target.as_ref().map(|t| t.table.to_string()).unwrap_or_default();
+    let text = match n {
+        Some(n) => format!("Run these {n} statement(s) on {table} in one transaction? Logged in the audit log."),
+        None => "These changes cannot be committed (see the SQL).".to_string(),
+    };
+    let r = b.label(egui::RichText::new(&text).color(theme::TEXT).size(12.0));
+    automation::register(&b, &r, &format!("{id}.confirm.text"), &text, Role::Label);
+    b.with_layout(egui::Layout::right_to_left(egui::Align::Center), |b| {
+        let ok = b.add_enabled(n.is_some(), egui::Button::new(egui::RichText::new("Commit").color(theme::ON_ACCENT)).fill(theme::ACCENT));
+        automation::register(b, &ok, &format!("{id}.confirm.commit"), "Commit", Role::Button);
+        let ctx = b.ctx().clone();
+        if let Some(t) = HumanTicket::from_click(&ctx, &ok) {
+            actions.push(Action::Commit(t));
+        }
+        let cancel = b.button("Cancel");
+        automation::register(b, &cancel, &format!("{id}.confirm.cancel"), "Cancel", Role::Button);
+        if cancel.clicked() {
+            ds.confirm = false;
+        }
+    });
 }
 
 fn detail_popover(ui: &mut egui::Ui, id: &str, g: &mut GridState, ds: &mut DrawState) {
