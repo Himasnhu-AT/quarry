@@ -18,6 +18,8 @@ quarry-engine = { path = "crates/engine" }
 quarry-viz = { path = "crates/viz" }
 # published as `ashlar-rs`; imported as `ashlar`
 ashlar = { package = "ashlar-rs", version = "0.2" }
+# not re-exported by ashlar-rs 0.2 (the grid builds `FileDiff`s for `DiffView`)
+ashlar-diff = "0.2"
 # foundation
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

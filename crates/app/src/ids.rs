@@ -24,6 +24,8 @@ use ashlar::prelude::*;
 use quarry_core::limits::{AGENT_ROW_CAP_MAX, AGENT_TIMEOUT_MS_MAX, SAMPLE_MAX};
 use quarry_core::{ChartKind, Refusal, RefusalCode, Region, Tab, TabId, TabKind, Workspace};
 
+use crate::grid;
+
 type S = Session<Workspace>;
 type R = Result<Value, CommandError>;
 
@@ -379,13 +381,13 @@ pub fn commands() -> Vec<CommandSpec<S>> {
         cmd!("query.format", "Format SQL", ["Query"], None, [Param::int_in("tab", 1, i64::MAX)], always, crate::editor::commands::query_format),
         query!("history.show", "Query History", [Param::string("search")], crate::editor::commands::history_show),
         query!("grid.filter", "Filter Grid", [], not_yet).shortcut("Mod+F"),
-        query!("grid.sort", "Sort Grid", [TAB, Param::string("column").required(), Param::bool("descending")], not_yet),
-        query!("grid.copy", "Copy Rows", [Param::one_of("format", &["tsv", "csv", "json", "insert"]).about("default tsv")], not_yet),
-        cmd!("edit.cell", "Edit Cell", [], Some("F2"), [], always, not_yet),
-        cmd!("edit.add_row", "Add Row", ["Edit"], None, [], always, not_yet),
-        cmd!("edit.delete_rows", "Delete Rows", ["Edit"], None, [], always, not_yet),
-        cmd!("edit.discard", "Discard Pending Changes", ["Edit"], None, [], always, not_yet),
-        query!("edit.review", "Review Pending Changes…", [], not_yet).shortcut("Mod+Alt+S"),
+        query!("grid.sort", "Sort Grid", [TAB, Param::string("column").required(), Param::bool("descending")], grid::commands::sort),
+        query!("grid.copy", "Copy Rows", [Param::one_of("format", &["tsv", "csv", "json", "insert"]).about("default tsv")], grid::commands::copy),
+        cmd!("edit.cell", "Edit Cell", [], Some("F2"), [], always, grid::commands::edit_cell),
+        cmd!("edit.add_row", "Add Row", ["Edit"], None, [], always, grid::commands::add_row),
+        cmd!("edit.delete_rows", "Delete Rows", ["Edit"], None, [], always, grid::commands::delete_rows),
+        cmd!("edit.discard", "Discard Pending Changes", ["Edit"], None, [], always, grid::commands::discard),
+        query!("edit.review", "Review Pending Changes…", [], grid::commands::review).shortcut("Mod+Alt+S"),
         CommandSpec::new("agent.toggle_panel", "Agent Panel", agent_toggle_panel).menu(&["View"]).shortcut("Mod+L").query(),
         query!("proposal.focus", "Review Agent Proposal", [], crate::agent::proposal_focus).shortcut("Mod+Shift+A"),
     ]

@@ -1,0 +1,23 @@
+# The result grid: scroll a 10M-row result, select cells, copy them (in process, virtual time).
+# Run by crates/app/tests/grid.rs after `scene results` (1280x800 points).
+assert exists id=quarry.grid.table
+assert text id=quarry.grid.rows "≥ 2,000 rows"
+scroll id=quarry.grid.table down 4000
+wait 300
+assert exists id=quarry.grid.table.row.150
+# select a block of rows, then copy them as TSV with the keyboard
+click id=quarry.grid.table.row.150
+click id=quarry.grid.table.row.153 --mods Shift
+press Mod+C
+wait --text "Copied 4 rows as TSV"
+# and as JSON through the command (counts only: cell text never leaves through a command)
+exec grid.copy '{"format": "json"}'
+wait --text "Copied 4 rows as JSON"
+# streaming: scrolling past the first page fetches the next ones and the count grows
+scroll id=quarry.grid.table down 30000
+wait 500
+wait --text "≥ 3,000 rows"
+# sort by a column (a 10M-row result re-queries) and start again at the top
+click id=quarry.grid.table.header.4
+wait --text "sorted by total_cents asc"
+assert exists id=quarry.grid.table.row.0

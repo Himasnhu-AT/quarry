@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ConnectionId, PanelId, TabId, TableRef};
+use crate::{ConnectionId, PanelId, PendingEdits, TabId, TableRef};
 
 /// The document format id.
 pub const FORMAT_ID: &str = "quarry.workspace";
@@ -20,6 +20,9 @@ pub struct Workspace {
     /// Chart and pivot panels.
     #[serde(default)]
     pub charts: Vec<ChartSpec>,
+    /// Pending table edits, one set per table tab with changes (grid stream; additive).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edits: Vec<PendingEdits>,
 }
 
 impl Workspace {
@@ -33,6 +36,10 @@ impl Workspace {
     }
     pub fn tab_mut(&mut self, id: TabId) -> Option<&mut Tab> {
         self.tabs.iter_mut().find(|t| t.id == id)
+    }
+    /// A tab's pending edits, if it has any.
+    pub fn edits(&self, tab: TabId) -> Option<&PendingEdits> {
+        self.edits.iter().find(|e| e.tab == tab)
     }
 }
 

@@ -26,6 +26,11 @@ pub const SCENES: &[&str] = &[
     "history",
     "open-table",
     "sidebar-menu",
+    // grid stream (crate::grid::scenes::SCENES)
+    "grid-loading",
+    "grid-values",
+    "grid-edits",
+    "grid-wide",
 ];
 
 fn editor_tab(s: &mut S, sql: &str) -> TabId {
@@ -78,6 +83,7 @@ pub fn setup(name: &str, s: &mut S) {
         // "empty", "connecting", "disconnected": the screen marker only, for now
         _ => {}
     }
+    crate::grid::scenes::setup(name, s);
 }
 
 /// The shell's part of a scene: demo connections, the open tree nodes and dialogs.

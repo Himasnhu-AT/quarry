@@ -28,6 +28,7 @@ quarry-guard = { workspace = true }
 quarry-engine = { workspace = true }
 quarry-viz = { workspace = true }
 ashlar = { workspace = true }
+ashlar-diff = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
@@ -37,4 +38,6 @@ ashlar-native = { version = "0.2", default-features = false, features = ["secret
 [dev-dependencies]
 tempfile = { workspace = true }
 # a small fixture database for the shell's `.ui` script test
+# and grid golden snapshots of one region (`Driver::check_snapshot`) and the fixture bench
+ashlar-debug = "0.2"
 rusqlite = { workspace = true }

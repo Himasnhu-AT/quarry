@@ -14,12 +14,14 @@
 //!   [`ProposalBook`].
 //! - [`audit`]: the append-only audit log entry.
 //! - [`tool`]: what each agent tool returns (contract 3).
-//! - [`workspace`]: the ashlar document (open tabs, editor texts, pinned charts).
+//! - [`workspace`]: the ashlar document (open tabs, editor texts, pinned charts, pending edits).
+//! - [`edits`]: pending table edits (the grid's change set before a human commit).
 //! - [`refusal`]: why the guard or a limit turned a call down.
 //! - [`limits`]: caps and timeouts shared by guard, engine and app.
 
 pub mod audit;
 pub mod connection;
+pub mod edits;
 pub mod ids;
 pub mod limits;
 pub mod plan;
@@ -34,6 +36,7 @@ pub mod workspace;
 
 pub use audit::{AuditEntry, AuditKind};
 pub use connection::{AgentAccess, ConnColor, ConnectionSpec, ConnectionSummary, EngineKind, Secret, SshAuth, SshSpec, Target, TlsMode};
+pub use edits::{PendingEdits, RowChange};
 pub use ids::{ConnectionId, CursorId, PanelId, ProposalId, TabId};
 pub use plan::PlanNode;
 pub use proposal::{Actor, Estimate, Proposal, ProposalBook, ProposalEvent, ProposalOutcome, ProposalStatus, TransitionError, transition};

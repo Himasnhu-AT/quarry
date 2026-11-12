@@ -399,6 +399,17 @@ impl Shell {
                 editor::history::record(cx.settings, &outcome.connection, entry);
             }
             let state = if outcome.result.is_ok() { "results" } else { "error" };
+            // the grid streams the rest of the cursor (grid stream)
+            match (&outcome.result, self.conns.human(&outcome.connection)) {
+                (Ok(rows), Some(human)) => {
+                    let dialect = self.conns.spec(&outcome.connection).map_or(EngineKind::Sqlite, |s| s.engine());
+                    let r = (rows.columns.clone(), rows.total, rows.cursor, rows.first.clone());
+                    // the rows are the last statement's (a re-sort re-runs that one)
+                    let last = outcome.sql.rsplit(";\n").next().unwrap_or(&outcome.sql);
+                    grid::open_rows(tab, human, r, last, dialect);
+                }
+                _ => grid::detach(tab),
+            }
             self.tabs.entry(tab).or_default().run = Some(RunState::Done(outcome));
             if cx.doc().active == Some(tab) {
                 cx.set_view("query_state", &state);
@@ -685,7 +696,7 @@ impl Shell {
                 editor::error_banner(ui, sql, e);
                 ui.add_space(8.0);
             }
-            grid::show(ui, &state);
+            grid::show_tab(ui, cx, tab.id, &state);
             for chart in doc.charts.iter().filter(|c| c.tab == Some(tab.id)) {
                 quarry_viz::chart(ui, chart);
             }
